@@ -7,7 +7,7 @@ Harden and verify the existing Bhumi Vikas Sahayak implementation against `brain
 Security first:
 
 - Confirm the committed database password has been removed from runtime source and replaced with environment configuration. Never print or reuse it. Report that provider-side rotation/history cleanup still requires the owner if not verifiable.
-- Add secret scanning and dependency/security checks appropriate to Maven and npm.
+- Add secret scanning and dependency/security checks appropriate to Maven, Python and npm.
 - Verify Spring Security endpoint policy, CORS, input limits, source-content headers, rate limiting, log redaction and admin authorization.
 - Test prompt injection, HTML/script source text, oversized input, malformed provider output, unknown citations and SQL/search metacharacters.
 

@@ -6,7 +6,7 @@ The specification is tailored to the code and data presently in this repository:
 
 - Frontend: React 19, TypeScript 6 and Vite 8.
 - Backend: Spring Boot 4 and Java 25 for public APIs, deterministic rules, calculations, citations and persistence.
-- AI service: a separate top-level Spring Boot service for provider credentials, prompts, embeddings and LLM calls.
+- AI service: a separate top-level Python service for provider credentials, prompts, embeddings and LLM calls.
 - Database: PostgreSQL (currently configured as a hosted Neon database).
 - Legal corpus: 106 JSONL records covering Rules 1-105 plus Rule 26-B, the page-separated English text, and official English/Hindi PDFs consolidated through 6 March 2025.
 

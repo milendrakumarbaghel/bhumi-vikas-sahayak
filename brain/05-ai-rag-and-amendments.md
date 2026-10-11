@@ -2,7 +2,7 @@
 
 ## 0. Deployment boundary
 
-All LLM provider clients, model credentials, prompts, embeddings and model-output parsing live in the separate top-level `ai-service/`. The main `backend/` contains only a narrow internal HTTP client plus deterministic verification/fallback logic. The frontend calls only the backend.
+All LLM provider clients, model credentials, prompts, embeddings and model-output parsing live in the separate top-level Python `ai-service/`. The main Java `backend/` contains only a narrow internal HTTP client plus deterministic verification/fallback logic. The frontend calls only the backend.
 
 The backend remains the authority for corpus versions, retrieval acceptance, legal applicability, calculations, citations and final answer status. Output from `ai-service/` is always an untrusted proposal that must be validated.
 

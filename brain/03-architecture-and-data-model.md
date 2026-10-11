@@ -20,7 +20,7 @@ Spring Boot API
   └─ JPA repositories + JDBC/vector query adapter
         │                         │ internal HTTP
         │                         ▼
-        │                 Separate AI service
+        │                 Separate Python AI service
         │                   ├─ language/intent prompts
         │                   ├─ embedding/reranking adapters
         │                   ├─ grounded generation schema
@@ -57,22 +57,23 @@ feedback/       feedback persistence
 config/         security, CORS, Jackson and observability
 ```
 
-Provider implementations, prompt templates and model credentials belong under the separate `ai-service/` root:
+Provider implementations, prompt templates and model credentials belong under the separate Python `ai-service/` root:
 
 ```text
-org.springboot.aiservice
-api/            internal-only endpoints and internal-token checks
-application/    intent/translation/grounded-generation use cases
-llm/            provider-neutral contract and provider adapters
+ai_service/
+app.py          internal-only HTTP server and token checks
+config.py       environment-only provider/service configuration
+models.py       backend-compatible transport model
+services/       intent/translation/grounded-generation use cases
+providers/      provider protocol and provider-specific adapters
 embedding/      future embedding/reranking adapters
-config/         provider-only configuration
 ```
 
 Rules:
 
 - Controllers validate transport DTOs and delegate; they do not query JPA directly.
 - `AnswerOrchestrator` is transactional only where persistence is needed; calls to `ai-service/` must not hold a database transaction open.
-- The backend knows only the internal service contract. Provider/model swapping happens inside `ai-service/`.
+- The Java backend knows only the internal HTTP contract. Provider/model swapping happens inside the Python `ai-service/`.
 - Calculator interfaces accept typed domain inputs and an explicit rule-set version.
 - Repositories return projections/domain objects; JPA entities do not cross the API boundary.
 - Use `ProblemDetail` (RFC 9457-style) for API errors.

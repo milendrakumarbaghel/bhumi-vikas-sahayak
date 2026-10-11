@@ -31,6 +31,7 @@ Required tests:
 
 ### Separate AI-service tests
 
+- Use Python `unittest` (or an explicitly approved Python test stack) and never require Maven/Java for `ai-service/`.
 - Provider configuration absent, provider timeout/rate limit/refusal and malformed structured output.
 - Internal-token authorization and no public CORS exposure.
 - Prompt/schema versioning and model metadata.

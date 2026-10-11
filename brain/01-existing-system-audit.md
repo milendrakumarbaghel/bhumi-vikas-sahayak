@@ -6,7 +6,7 @@ The repository now has three explicit runtime boundaries:
 
 - `frontend/`: React 19 + TypeScript + Vite user interface (still the starter UI).
 - `backend/`: public Spring Boot API, deterministic rule ingestion/cleaning, Lucene retrieval, unit validation and the future calculation/citation boundary.
-- `ai-service/`: separate Spring Boot internal service containing LLM prompts, provider credentials and provider HTTP integration.
+- `ai-service/`: separate Python internal service containing LLM prompts, provider credentials and provider HTTP integration.
 
 The source-data and retrieval foundations are usable and tested. The complete clerk-answer workflow, PostgreSQL persistence, final grounded generation, citations UI, deterministic legal calculators and amendment activation are still missing.
 
@@ -22,14 +22,14 @@ The source-data and retrieval foundations are usable and tested. The complete cl
 | Lexical retrieval | `RuleSearch`, `Retriever`, `Topic` | Completed foundation | In-memory Lucene BM25 plus explicit/topic-pinned rules; not PostgreSQL/hybrid/vector retrieval. |
 | Hindi/English query normalization | deterministic fallback plus optional internal AI intent client | Partially completed | Seed Hindi terms and numeric extraction work; broad bilingual coverage/evaluation is missing. |
 | AI separation | Top-level `ai-service/`; backend only has `AiIntentClient` HTTP adapter | Completed architecture boundary | Provider prompt/key/client no longer exist in `backend/`. Frontend never calls AI service directly. |
-| AI service behavior | Internal `POST /internal/v1/query-intents`, provider-neutral interface and Anthropic adapter | Partially completed | Intent extraction only. No grounded answer-generation or embedding endpoint yet. |
+| AI service behavior | Python standard-library HTTP service, internal `POST /internal/v1/query-intents`, provider protocol and Anthropic adapter | Partially completed | Intent extraction only. No grounded answer-generation or embedding endpoint yet. |
 | Failure behavior | Backend falls back locally if AI service is disabled/unavailable/invalid | Completed foundation | Retrieval remains usable without an LLM. Final answer safe-status behavior remains missing. |
 | Numerical validation | Backend rejects AI-proposed measurements not present in the question; unit conversions exist | Partially completed | Legal fee/setback/FAR/duration/clearance calculators are missing; current utility uses `double`, not final `BigDecimal` legal calculations. |
 | Citations | Rule/chunk/page metadata exists in retrieval results | Partially completed | No claim-to-citation validator, exact excerpt contract, official PDF viewer or final answer mapping. |
 | PostgreSQL | No current datasource/JPA/Flyway configuration in the generated backend | Missing | The earlier exposed datasource configuration is no longer present, but the target database model/migrations are not implemented. |
 | Amendment handling | Version warning constants identify the unverified 28 August 2026 issue | Partially completed | No effective-dated provision schema, authoritative amendment source or activation workflow. |
 | Backend tests | 44 tests for retrieval, data loading, chunking and cleaning | Partially completed | Useful foundation; controller/integration/calculator/citation tests remain missing. |
-| AI-service tests | Test verifies hallucinated measurements are removed | Partially completed | Provider/controller/auth/failure/contract coverage remains thin. |
+| AI-service tests | Python `unittest` coverage verifies the HTTP contract, token protection, Devanagari digits and removal of hallucinated measurements | Partially completed | Live-provider, timeout/rate-limit and malformed-output coverage remains incomplete. |
 | Frontend tests | ESLint config only | Missing | No component/accessibility/E2E suite. |
 | Operations | Separate ports/config and service READMEs | Partially completed | No Compose, CI, container images, observability or deployment network policy. |
 
