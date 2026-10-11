@@ -1,93 +1,263 @@
-# Bhopal Impact Lab 2026: problem statements and data
+# Bhumi Vikas Sahayak
 
-Claude Impact Lab × Cerebras Café Compute, Bhopal · Sunday 11 October 2026 · SSR Global Skills Park
+Bhumi Vikas Sahayak is a bilingual building-rules assistant for building-permission clerks at Bhopal Municipal Corporation. It is being built for Track 1 of Bhopal Impact Lab 2026.
 
-Today you build a working tool for a real Bhopal problem, in one day, with Claude and Claude Code. Everything you build is open source and offered to the Government of Madhya Pradesh through MPSeDC.
+The intended workflow is simple: a clerk asks a question in English or Hindi, the system finds the relevant Madhya Pradesh Bhumi Vikas Rules, performs deterministic calculations when required, and returns a concise answer with rule numbers, exact source text and PDF page references.
 
-This repo has both problem statements, the data for each track, the original source documents and all the links.
+This software is an informational aid. It does not grant permission, make a legal decision or replace verification by the competent authority.
 
-## The two tracks
+## Project status
 
-| | Track 1: Bhumi Vikas Sahayak | Track 2: Visarjan Ghat Watch |
-|---|---|---|
-| In one line | Ask the Bhopal building rulebook and get an answer with the rule number | Turn three years of ghat water tests into a risk warning before Durga visarjan |
-| User | Building-permission clerk, Bhopal Municipal Corporation | BMC officer planning Durga visarjan at the ghats |
-| Data | 105 rules from the MP Bhumi Vikas Rules 2012, split and page-referenced | 1,524 water-test readings at 7 Bhopal ghats, 2023 to 2025 |
-| Problem statement | [Read it](track-1-bhumi-vikas-sahayak/PROBLEM-STATEMENT.md) · [PDF](track-1-bhumi-vikas-sahayak/Track%201%20-%20Bhumi%20Vikas%20Sahayak%20-%20Participant%20guide.pdf) | [Read it](track-2-visarjan-ghat-watch/PROBLEM-STATEMENT.md) · [PDF](track-2-visarjan-ghat-watch/Track%202%20-%20Visarjan%20Ghat%20Watch%20-%20Participant%20guide.pdf) |
+Implemented foundations:
 
-Pick one track with your team at the opening.
+- Loading and cleaning all 106 supplied rule records.
+- Detection of inserted rules such as 12-A, 17-a and 26-A.
+- In-memory Lucene rule search with rule/topic pinning.
+- Basic English/Hindi query normalization and measurement extraction.
+- Optional Python AI service for bilingual intent extraction.
+- Automatic deterministic fallback when the AI service is disabled or unavailable.
+- Rule catalogue, rule detail, search and health APIs.
 
-## Key times
+Still under development:
 
-- Build starts at 10:15 AM. Code you submit must be written after that.
-- Submissions close at 5:00 PM.
+- Clerk-focused frontend (the current frontend is still the Vite starter screen).
+- Final cited-answer API and citation validation.
+- PostgreSQL persistence and migrations.
+- Deterministic fee, setback, FAR and other legal calculators.
+- Effective-dated amendment activation and administration.
 
-**Submit here:** https://docs.google.com/forms/d/e/1FAIpQLSfKNgfbYvYMI6xHgS0ir4kBhZWspGp37hIzbt9PhB-ZfK70vQ/viewform
+Detailed requirements and implementation prompts are in [`brain/`](brain/README.md).
 
-Submit your public GitHub repo link and, if you have one, your 2-minute screen recording.
+## Architecture
 
-## What's in this repo
-
+```text
+Browser
+  │
+  ▼
+React + TypeScript frontend (:5173)
+  │ public HTTP
+  ▼
+Java Spring Boot backend (:8080)
+  ├─ public APIs
+  ├─ rule corpus and Lucene search
+  ├─ deterministic validation/fallback
+  └─ optional internal HTTP call
+             │
+             ▼
+Python AI service (:8081)
+  └─ provider prompts, credentials and intent extraction
 ```
-track-1-bhumi-vikas-sahayak/
-  PROBLEM-STATEMENT.md       the problem statement and guide
-  Track 1 ... guide.pdf      the same, as a PDF
-  data/                      rules as JSONL (full and sample), full text by page, data dictionary
-  resources/                 official English and Hindi PDFs of the rules, sample questions
-track-2-visarjan-ghat-watch/
-  PROBLEM-STATEMENT.md       the problem statement and guide
-  Track 2 ... guide.pdf      the same, as a PDF
-  data/                      Bhopal ghat readings, 2025 sample, statewide readings, CPCB limits, data dictionary
-  resources/                 MPPCB visarjan reports 2023 to 2025 and lake water-quality reports
+
+The frontend calls only the Java backend. The Python AI service is internal and never decides applicable law, calculates official values or creates authoritative citations.
+
+## Repository layout
+
+```text
+frontend/                       React 19, TypeScript and Vite
+backend/                        Java 25, Spring Boot and Lucene
+ai-service/                     Python 3.11+ internal AI service
+track-1-bhumi-vikas-sahayak/    supplied data, official PDFs and sample questions
+brain/                          requirements, architecture, API and testing documents
 ```
 
-## Data files
+Component guides:
 
-**Track 1**
+- [Frontend setup](frontend/README.md)
+- [Backend setup](backend/README.md)
+- [Python AI-service setup](ai-service/README.md)
 
-| File | Size | What it holds |
-|---|---|---|
-| `data/bhumi_vikas_rules.jsonl` | 106 lines | All 105 rules plus rule 26-B, with rule number, title, part, PDF page range and full text |
-| `data/bhumi_vikas_rules_sample.jsonl` | 5 lines | Rules 12, 17, 23, 52 and 56, for quick tests |
-| `data/bhumi_vikas_rules_fulltext_by_page.txt` | 108 pages | The whole English text, marked page by page |
-| `data/DATA_DICTIONARY.md` | | What every field means |
-| `resources/MP_Bhumi_Vikas_Rules_2012_upto_2025-03-06_EN.pdf` | 108 pages | Official English PDF (source of truth) |
-| `resources/MP_Bhumi_Vikas_Rules_2012_upto_2025-03-06_HI.pdf` | 108 pages | Official Hindi PDF |
-| `resources/sample_questions.md` | 17 questions | Questions to test your tool with |
+## Prerequisites
 
-**Track 2**
+- Git.
+- Node.js 20.19+ or 22.12+ and npm (matching Vite 8 requirements).
+- Java Development Kit 25.
+- Python 3.11 or newer.
+- An Anthropic API key and supported model ID only if you want AI-assisted intent extraction.
 
-| File | Rows | What it holds |
-|---|---|---|
-| `data/bhopal_ghats_2023_2025.csv` | 1,524 | Every reading at 7 Bhopal ghats, 2023 to 2025. Start here |
-| `data/sample_bhopal_2025.csv` | 453 | The 2025 rows, for quick testing |
-| `data/mp_immersion_sites_2023_2025.csv` | 21,600 | The same tests across MP. Use as background |
-| `data/cpcb_water_quality_criteria.csv` | 19 | Official CPCB limits, classes A to E |
-| `data/DATA_DICTIONARY.md` | | Columns, codes, units and the 7 ghats |
-| `resources/` | 6 PDFs | MPPCB reports 2023, 2024, 2025 and Upper / Lower Lake water-quality reports |
+Maven does not need to be installed globally; the repository includes Maven Wrapper scripts.
 
-## Sources
+## Quick start without AI
 
-**Track 1**
+This is the simplest way to run the current project. Open two terminals from the repository root.
 
-- MP Bhumi Vikas Rules 2012, English, consolidated to 6 March 2025: https://mptownplan.gov.in/NewsPDF/bvn06032025E.pdf
-- MP Bhumi Vikas Rules 2012, Hindi, consolidated to 6 March 2025: https://mptownplan.gov.in/NewsPDF/bvn06032025H.pdf
-- Amendment of 28 August 2026 to Rule 2(5)(c), plots up to 500 sq m: https://teamleaseregtech.com/updates/article/59469/government-of-madhya-pradesh-amendment-to-land-development-rules
+### macOS or Linux
 
-**Track 2**
+Terminal 1 - backend:
 
-- MPPCB Ganesh and Durga Visarjan Report 2025: https://www.mppcb.mp.gov.in/proc/mon/Ganesh_and_Durga_visarjan_report-2025.pdf
-- MPPCB Ganesh and Durga Visarjan Report 2024: https://www.mppcb.mp.gov.in/proc/mon/Ganesh_and_Durga_visarjan_report-2024.pdf
-- MPPCB Idol Immersion Report 2023 (CPCB format): https://www.mppcb.mp.gov.in/proc/mon/Idol_immer._Report_23_CPCB.pdf
-- Upper and Lower Lake monthly water quality 2025-26: https://xgn.mp.nic.in/File_Upload/MONITORING//Yearly%20Water%20Quality%20Status/2026/July/UPPER%20LAKE-2025-26..pdf
-- Upper Lake water quality 2023-24: https://www.mppcb.mp.gov.in/proc/mon/Bhopal-2023-24_upper_lake.pdf
-- Upper Lake water quality by station, 2003-04 to 2022-23: https://www.mppcb.mp.gov.in/proc/mon/comparatives-uppe-lak-lower-lake-2003-2023.pdf
-- CPCB water quality criteria: https://cpcb.gov.in/water-quality-criteria/
-- NGT immersion ban and new BMC ghats, Free Press Journal, 26 Feb 2026: https://www.freepressjournal.in/amp/bhopal/mp-news-idol-immersion-to-shift-from-lakes-to-safer-sites-ngt-ban-pushes-bmc-to-build-4-dedicated-ghats
-- Durga visarjan date, Drik Panchang: https://www.drikpanchang.com/navratri/durga-puja/durga-visarjan-date-time.html?year=2026
+```bash
+cd backend
+BVS_AI_ENABLED=false ./mvnw spring-boot:run
+```
 
-## Credits
+Terminal 2 - frontend:
 
-The data files and source PDFs come from the participant pack at https://github.com/Laaaaksh/bhopal-impact-lab-2026, prepared by Laksh Sadhwani.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-Organisers: Aniket Sahu (Claude Community Ambassador) and Arun Pratap Singh Chandel (Cerebras Community Ambassador).
+Open `http://localhost:5173`. Backend health is available at `http://localhost:8080/api/health`.
+
+### Windows PowerShell
+
+Terminal 1 - backend:
+
+```powershell
+Set-Location backend
+$env:BVS_AI_ENABLED = "false"
+.\mvnw.cmd spring-boot:run
+```
+
+Terminal 2 - frontend:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Backend health is available at `http://localhost:8080/api/health`.
+
+## Run the complete three-service setup
+
+Use the same non-empty internal token for the backend and AI service. Never commit the token or provider key.
+
+### macOS or Linux
+
+Terminal 1 - AI service:
+
+```bash
+cd ai-service
+export ANTHROPIC_API_KEY="your-api-key"
+export ANTHROPIC_MODEL="your-supported-model-id"
+export BVS_AI_SERVICE_TOKEN="replace-with-a-random-secret"
+python3 -m ai_service
+```
+
+Terminal 2 - backend:
+
+```bash
+cd backend
+export BVS_AI_ENABLED="true"
+export BVS_AI_SERVICE_URL="http://localhost:8081"
+export BVS_AI_SERVICE_TOKEN="replace-with-the-same-random-secret"
+./mvnw spring-boot:run
+```
+
+Terminal 3 - frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Windows PowerShell
+
+Terminal 1 - AI service:
+
+```powershell
+Set-Location ai-service
+$env:ANTHROPIC_API_KEY = "your-api-key"
+$env:ANTHROPIC_MODEL = "your-supported-model-id"
+$env:BVS_AI_SERVICE_TOKEN = "replace-with-a-random-secret"
+py -3 -m ai_service
+```
+
+If the Python Launcher is unavailable, use `python -m ai_service`.
+
+Terminal 2 - backend:
+
+```powershell
+Set-Location backend
+$env:BVS_AI_ENABLED = "true"
+$env:BVS_AI_SERVICE_URL = "http://localhost:8081"
+$env:BVS_AI_SERVICE_TOKEN = "replace-with-the-same-random-secret"
+.\mvnw.cmd spring-boot:run
+```
+
+Terminal 3 - frontend:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+## Verify the services
+
+macOS/Linux:
+
+```bash
+curl http://localhost:8081/internal/v1/health
+curl http://localhost:8080/api/health
+curl http://localhost:8080/api/rules/56
+```
+
+Windows PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:8081/internal/v1/health
+Invoke-RestMethod http://localhost:8080/api/health
+Invoke-RestMethod http://localhost:8080/api/rules/56
+```
+
+## Run tests and checks
+
+macOS/Linux:
+
+```bash
+cd backend && ./mvnw test
+cd ../ai-service && python3 -m unittest discover -s tests -v
+cd ../frontend && npm install && npm run lint && npm run build
+```
+
+Windows PowerShell (run each line from the repository root):
+
+```powershell
+Set-Location backend; .\mvnw.cmd test; Set-Location ..
+Set-Location ai-service; py -3 -m unittest discover -s tests -v; Set-Location ..
+Set-Location frontend; npm install; npm run lint; npm run build; Set-Location ..
+```
+
+## Configuration
+
+| Variable | Component | Default | Purpose |
+|---|---|---|---|
+| `PORT` | Backend | `8080` | Public backend port. |
+| `BVS_DATA_DIR` | Backend | `../track-1-bhumi-vikas-sahayak/data` | Directory containing rule JSONL. |
+| `BVS_PDF_FILE` | Backend | supplied English PDF | Official source PDF path. |
+| `BVS_CORS_ORIGINS` | Backend | `http://localhost:5173` | Allowed frontend origin(s). |
+| `BVS_AI_ENABLED` | Backend | `true` | Enables the optional internal AI call. |
+| `BVS_AI_SERVICE_URL` | Backend | `http://localhost:8081` | Python AI-service base URL. |
+| `BVS_AI_SERVICE_TOKEN` | Both services | empty | Shared internal authentication token. Required outside local development. |
+| `AI_SERVICE_HOST` | AI service | `127.0.0.1` | Bind address. |
+| `AI_SERVICE_PORT` | AI service | `8081` | Internal service port. |
+| `ANTHROPIC_API_KEY` | AI service | empty | Provider credential. Never expose to frontend/backend source. |
+| `ANTHROPIC_MODEL` | AI service | empty | Supported provider model ID. |
+
+## Data and rule version
+
+The supplied machine-readable corpus contains Rules 1-105 plus Rule 26-B from the MP Bhumi Vikas Rules, 2012, consolidated through 6 March 2025. The official English PDF is the source of truth. The Hindi PDF is included for visual reference, but its legacy font is not safe for automatic text extraction.
+
+Repository material also identifies a later amendment dated 28 August 2026 affecting Rule 2(5)(c). Its authoritative official text is not included in the supplied corpus, so the application must warn rather than silently treat the March 2025 text as current for affected questions.
+
+## Security and privacy
+
+- Do not commit API keys, internal tokens or database credentials.
+- Do not expose the Python internal service directly to browsers or the internet.
+- Do not enter personal, property-owner or application-identifying data.
+- Treat AI output as untrusted until the Java backend validates it against official source text.
+- Do not present the application as legal advice or automated approval.
+
+## Source and credits
+
+The Track 1 data and source PDFs come from the Bhopal Impact Lab 2026 participant pack prepared by Laksh Sadhwani:
+
+- [Track 1 problem statement](track-1-bhumi-vikas-sahayak/PROBLEM-STATEMENT.md)
+- [Data dictionary](track-1-bhumi-vikas-sahayak/data/DATA_DICTIONARY.md)
+- [Sample questions](track-1-bhumi-vikas-sahayak/resources/sample_questions.md)
+- [Original participant-pack repository](https://github.com/Laaaaksh/bhopal-impact-lab-2026)
+
+Organisers: Aniket Sahu and Arun Pratap Singh Chandel.
