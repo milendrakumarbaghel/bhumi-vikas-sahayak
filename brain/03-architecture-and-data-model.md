@@ -40,21 +40,18 @@ The LLM is not a database and not a calculator. The main backend owns public orc
 
 ## 2. Backend package boundaries
 
-Use feature-oriented packages under the existing `org.springboot.backend` root (or rename the root in a deliberate separate migration):
+The backend now uses the requested `org.springboot.backend` root:
 
 ```text
-api/            controllers, request/response DTOs, exception mapping
-application/    use cases and answer orchestration
-integration/ai/ narrow internal HTTP client; no prompts/provider credentials
-answer/         statuses and grounded answer policies
-retrieval/      keyword/vector queries, ranking, context construction
-calculation/    fee, setback, FAR, duration and clearance calculators
-corpus/         ingestion, parsing, source/version/provision entities
-amendment/      effective dating, supersession, activation workflow
-language/       detection, locale terminology and translation boundary
-citation/       excerpt matching and claim-to-source validation
-feedback/       feedback persistence
-config/         security, CORS, Jackson and observability
+config/         AI HTTP, CORS and database configuration
+controller/     assistant, rule and document APIs
+dto/            validated transport contracts
+entity/         JPA rule, passage, source and amendment entities
+repository/     Spring Data repositories
+service/        retrieval, import, calculation, citation and amendment services
+service/impl/   assistant orchestration and Python AI-service adapter
+exception/      ProblemDetail mapping and domain exceptions
+util/           JSONL parsing and language detection
 ```
 
 Provider implementations, prompt templates and model credentials belong under the separate Python `ai-service/` root:
@@ -72,7 +69,7 @@ embedding/      future embedding/reranking adapters
 Rules:
 
 - Controllers validate transport DTOs and delegate; they do not query JPA directly.
-- `AnswerOrchestrator` is transactional only where persistence is needed; calls to `ai-service/` must not hold a database transaction open.
+- `AssistantServiceImpl` orchestrates answers; calls to `ai-service/` occur before the read-only retrieval transaction and must not hold a database transaction open.
 - The Java backend knows only the internal HTTP contract. Provider/model swapping happens inside the Python `ai-service/`.
 - Calculator interfaces accept typed domain inputs and an explicit rule-set version.
 - Repositories return projections/domain objects; JPA entities do not cross the API boundary.

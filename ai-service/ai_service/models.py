@@ -64,6 +64,8 @@ class AnswerProposal:
     citations: tuple[CitationProposal, ...]
     missing_inputs: tuple[str, ...]
     model: str
+    # Output of ai_service.calculators.run(), or None when no calculator applied.
+    calculations: dict[str, Any] | None = None
 
     def to_contract(self) -> dict[str, Any]:
         return {
@@ -73,4 +75,5 @@ class AnswerProposal:
             "citations": [{"chunkId": c.chunk_id, "quote": c.quote} for c in self.citations],
             "missingInputs": list(self.missing_inputs),
             "model": self.model,
+            "calculations": self.calculations,
         }

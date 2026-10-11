@@ -12,18 +12,19 @@ Implemented foundations:
 
 - Loading and cleaning all 106 supplied rule records.
 - Detection of inserted rules such as 12-A, 17-a and 26-A.
-- In-memory Lucene rule search with rule/topic pinning.
+- PostgreSQL-backed rule and passage persistence with Flyway migrations.
+- Database-backed rule passage retrieval.
 - Basic English/Hindi query normalization and measurement extraction.
 - Optional Python AI service for bilingual intent extraction.
 - Automatic deterministic fallback when the AI service is disabled or unavailable.
-- Rule catalogue, rule detail, search and health APIs.
+- Rule catalogue, document, import and cited assistant APIs under `/api/v1`.
+- A deterministic Rule 56 front-open-space calculation path.
 
 Still under development:
 
 - Clerk-focused frontend (the current frontend is still the Vite starter screen).
-- Final cited-answer API and citation validation.
-- PostgreSQL persistence and migrations.
-- Deterministic fee, setback, FAR and other legal calculators.
+- Broader citation validation and grounded answer generation.
+- Remaining fee, FAR, setback and other legal calculators beyond the current Rule 56 case.
 - Effective-dated amendment activation and administration.
 
 Detailed requirements and implementation prompts are in [`brain/`](brain/README.md).
@@ -39,8 +40,8 @@ React + TypeScript frontend (:5173)
   ▼
 Java Spring Boot backend (:8080)
   ├─ public APIs
-  ├─ rule corpus and Lucene search
-  ├─ deterministic validation/fallback
+  ├─ PostgreSQL/Flyway rule corpus and passage retrieval
+  ├─ deterministic validation, citation and calculation services
   └─ optional internal HTTP call
              │
              ▼
@@ -54,7 +55,7 @@ The frontend calls only the Java backend. The Python AI service is internal and 
 
 ```text
 frontend/                       React 19, TypeScript and Vite
-backend/                        Java 25, Spring Boot and Lucene
+backend/                        Java 25, Spring Boot, JPA, Flyway and PostgreSQL
 ai-service/                     Python 3.11+ internal AI service
 track-1-bhumi-vikas-sahayak/    supplied data, official PDFs and sample questions
 brain/                          requirements, architecture, API and testing documents
@@ -72,9 +73,12 @@ Component guides:
 - Node.js 20.19+ or 22.12+ and npm (matching Vite 8 requirements).
 - Java Development Kit 25.
 - Python 3.11 or newer.
+- PostgreSQL 15 or newer with a database/user matching the backend configuration.
 - An Anthropic API key and supported model ID only if you want AI-assisted intent extraction.
 
 Maven does not need to be installed globally; the repository includes Maven Wrapper scripts.
+
+Before starting the backend, create the local PostgreSQL database described in [the backend guide](backend/README.md), or set `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` for an existing database.
 
 ## Quick start without AI
 
@@ -97,7 +101,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Backend health is available at `http://localhost:8080/api/health`.
+Open `http://localhost:5173`. Verify the backend at `http://localhost:8080/api/v1/rules/56`.
 
 ### Windows PowerShell
 
@@ -117,7 +121,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Backend health is available at `http://localhost:8080/api/health`.
+Open `http://localhost:5173`. Verify the backend at `http://localhost:8080/api/v1/rules/56`.
 
 ## Run the complete three-service setup
 
@@ -191,16 +195,14 @@ macOS/Linux:
 
 ```bash
 curl http://localhost:8081/internal/v1/health
-curl http://localhost:8080/api/health
-curl http://localhost:8080/api/rules/56
+curl http://localhost:8080/api/v1/rules/56
 ```
 
 Windows PowerShell:
 
 ```powershell
 Invoke-RestMethod http://localhost:8081/internal/v1/health
-Invoke-RestMethod http://localhost:8080/api/health
-Invoke-RestMethod http://localhost:8080/api/rules/56
+Invoke-RestMethod http://localhost:8080/api/v1/rules/56
 ```
 
 ## Run tests and checks
@@ -226,11 +228,14 @@ Set-Location frontend; npm install; npm run lint; npm run build; Set-Location ..
 | Variable | Component | Default | Purpose |
 |---|---|---|---|
 | `PORT` | Backend | `8080` | Public backend port. |
-| `BVS_DATA_DIR` | Backend | `../track-1-bhumi-vikas-sahayak/data` | Directory containing rule JSONL. |
+| `DB_URL` | Backend | configured Neon pooled URL | PostgreSQL JDBC URL; override for local development. |
+| `DB_USERNAME` | Backend | `neondb_owner` | PostgreSQL username. |
+| `DB_PASSWORD` | Backend | empty | Required database password; keep it outside source control. |
 | `BVS_PDF_FILE` | Backend | supplied English PDF | Official source PDF path. |
 | `BVS_CORS_ORIGINS` | Backend | `http://localhost:5173` | Allowed frontend origin(s). |
 | `BVS_AI_ENABLED` | Backend | `true` | Enables the optional internal AI call. |
-| `BVS_AI_SERVICE_URL` | Backend | `http://localhost:8081` | Python AI-service base URL. |
+| `APP_AI_SERVICE_URL` | Backend | `http://localhost:8000` | Default Python AI-service base URL. |
+| `BVS_AI_SERVICE_URL` | Backend | value of `APP_AI_SERVICE_URL` | Optional backend-specific override. |
 | `BVS_AI_SERVICE_TOKEN` | Both services | empty | Shared internal authentication token. Required outside local development. |
 | `AI_SERVICE_HOST` | AI service | `127.0.0.1` | Bind address. |
 | `AI_SERVICE_PORT` | AI service | `8081` | Internal service port. |

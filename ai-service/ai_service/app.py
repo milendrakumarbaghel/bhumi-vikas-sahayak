@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Any, Type
 
+from ai_service.calculators import calculators
 from ai_service.config import Settings
 from ai_service.providers.anthropic import AnthropicProvider
 from ai_service.providers.base import ProviderError
@@ -37,7 +38,8 @@ def create_handler(
 
         def do_POST(self) -> None:  # noqa: N802 - standard library callback name
             answers = self.path == "/internal/v1/answers" and answer_service is not None
-            if self.path != "/internal/v1/query-intents" and not answers:
+            calculations = self.path == "/internal/v1/calculations"
+            if self.path != "/internal/v1/query-intents" and not answers and not calculations:
                 self._json(404, {"code": "NOT_FOUND", "message": "Endpoint not found"})
                 return
             if internal_token and not compare_digest(
@@ -46,6 +48,17 @@ def create_handler(
                 self._json(401, {"code": "UNAUTHORIZED", "message": "Invalid internal token"})
                 return
             try:
+                if calculations:
+                    # Plain code, no language model: works even without a provider key.
+                    body = self._request_json()
+                    if not isinstance(body, dict):
+                        raise ValueError("request body must be an object")
+                    topics = body.get("topics") or []
+                    if not isinstance(topics, list) or not all(isinstance(x, str) for x in topics):
+                        raise ValueError("topics must be a list of topic codes")
+                    facts = calculators.facts_from_contract(body)
+                    self._json(200, calculators.run(facts, topics))
+                    return
                 if answers:
                     body = self._request_json(MAX_ANSWER_BODY_BYTES)
                     if not isinstance(body, dict):
@@ -105,7 +118,7 @@ def build_server(settings: Settings) -> ThreadingHTTPServer:
     service = QueryIntentService(provider)
     return ThreadingHTTPServer(
         (settings.host, settings.port),
-        create_handler(service, settings.internal_token, AnswerService(provider)),
+        create_handler(service, settings.internal_token, AnswerService(provider, service)),
     )
 
 

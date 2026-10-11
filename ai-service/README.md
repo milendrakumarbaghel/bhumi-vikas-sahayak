@@ -13,13 +13,33 @@ The service may:
 - Word a short answer (English or plain Hindi) from rule extracts the backend supplies,
   citing each statement as a chunk ID plus a verbatim quote. The backend verifies every
   quote against the rule text before anything is shown.
+- Run the deterministic rule calculators in `ai_service/calculators/` (plain Python, no
+  language model): front/rear open space (Rule 56), permission and application fees
+  (Rule 21), maximum built-up area from FAR (Rule 61) and farm-house limits (Rule 17).
 
 The service must not:
 
 - Decide which rule legally applies.
-- Choose an authoritative table row.
-- Calculate fees, setbacks, FAR or other legal values.
+- Let the language model choose a table row or do arithmetic: calculators do the maths and
+  the model only words their result.
 - Create authoritative citation metadata (rule number, title, pages); the backend attaches these.
+
+### Calculators
+
+Every table value in `calculators/tables.py` was checked against the official English PDF
+(`track-1-bhumi-vikas-sahayak/resources/MP_Bhumi_Vikas_Rules_2012_upto_2025-03-06_EN.pdf`)
+and cites its page: Rule 56 tables p.77-78, Rule 21 fees p.35-37, Rule 2(38) high rise p.8,
+Rule 61 Table 8 p.83, Rule 17 p.34. Every result returns its inputs, matched band, formula,
+assumptions and PDF page. Decisions where the printed rules are ambiguous:
+
+- **Fee bands** (Rule 21(3)(b)) are printed as whole numbers with gaps (0-75, 76-125, ...).
+  Each band runs up to and including its upper figure; anything above falls in the next band
+  (75.5 sq m pays Rs. 1,250).
+- **Floor count**: the rules give FAR but no ground coverage for ordinary residential plots.
+  The calculator returns the maximum total built-up area (plot area x FAR) and a floor count
+  at 50/60/75% coverage that is labelled "ILLUSTRATION ONLY, NOT FROM THE RULES".
+- When only the plot area is given, fees are shown for the maximum built-up area under FAR,
+  stated as an assumption.
 
 The Java backend validates every response and falls back to deterministic parsing when this service is unavailable.
 
@@ -31,6 +51,9 @@ ai_service/
 ├── app.py                  internal HTTP server and token validation
 ├── config.py               environment configuration
 ├── models.py               backend-compatible response model
+├── calculators/
+│   ├── tables.py           rule table values, each citing its PDF page
+│   └── calculators.py      setback, fee, FAR and farm-house calculators
 ├── providers/
 │   ├── base.py             provider protocol and safe exception
 │   └── anthropic.py        Anthropic HTTP adapter
@@ -108,7 +131,8 @@ Tests use a fake provider and make no external API calls.
 
 - `GET /internal/v1/health`
 - `POST /internal/v1/query-intents`
-- `POST /internal/v1/answers` - `{question, language, chunks[], calculation?}` -> `{status, answer, citations[{chunkId, quote}], missingInputs[]}`
+- `POST /internal/v1/answers` - `{question, language, chunks[], facts?, calculation?}` -> `{status, answer, citations[{chunkId, quote}], missingInputs[], calculations}`. If neither `calculation` nor `facts` is sent, the service derives facts from the question (query-intent analysis) and runs the calculators itself.
+- `POST /internal/v1/calculations` - `{topics[], plotArea?, roadWidth?, buildingHeight?, builtUpArea?, storeys?, buildingUse?, commercialCategory?, groundCoveragePercent?}` -> `{calculations[], missingInputs[], notApplicable[]}`. Measures are `{value, unit}` with area units `sqm|sqft|sqyd|ha` and length units `m|ft`. No language model is called, so this works without an API key.
 
 Example health check:
 

@@ -5,8 +5,10 @@ import json
 import unicodedata
 from typing import Any
 
-from ai_service.models import AnswerProposal, CitationProposal
+from ai_service.calculators import calculators
+from ai_service.models import AnswerProposal, CitationProposal, Measure
 from ai_service.providers.base import ProviderError, StructuredLlmProvider
+from ai_service.services.query_intent import QueryIntentService
 
 
 STATUSES = ("answered", "not_found", "needs_more_info")
@@ -35,9 +37,13 @@ Rules you must follow:
    different places, do not add "..." and do not translate the quote.
 5. Keep the answer to 2-4 short sentences. Give numbers and units exactly as the rule does
    and name the rule number, e.g. "Rule 56(1)".
-6. If a CALCULATION is provided, use its result and inputs as given. Never do arithmetic
-   yourself. If a figure would need arithmetic and no calculation is provided, quote the
-   rule's rate or table row instead of computing.
+6. If a CALCULATION is provided, it was computed by code from the rule tables: use its
+   result values, units and rule as given, and briefly mention its assumptions (for example
+   "assuming the building is up to 12.5 m high"). Still cite the rule text it came from.
+   Anything under "floorIllustration" is NOT from the rules: if you mention it, say clearly
+   that it is only an illustration because the rules do not set ground coverage. Never do
+   arithmetic yourself. If a figure would need arithmetic and no calculation is provided,
+   quote the rule's rate or table row instead of computing.
 7. Every number in your answer (fees, metres, years, percentages) must appear in the
    extracts, the question or the CALCULATION. The backend checks every quote and number
    against the rule text and rejects the whole answer if any does not match.
@@ -48,16 +54,24 @@ Rules you must follow:
 
 
 class AnswerService:
-    def __init__(self, provider: StructuredLlmProvider) -> None:
+    def __init__(
+        self,
+        provider: StructuredLlmProvider,
+        intent_service: QueryIntentService | None = None,
+    ) -> None:
         self._provider = provider
+        self._intent = intent_service
 
     def answer(self, request: dict[str, Any]) -> AnswerProposal:
         question = _required_string(request, "question", 600)
         language = "hi" if request.get("language") == "hi" else "en"
         chunks = _chunks(request.get("chunks"))
-        calculation = request.get("calculation")
         if not self._provider.configured:
             raise ProviderError("LLM provider is not configured")
+
+        calculation = request.get("calculation")
+        if not (isinstance(calculation, dict) and calculation):
+            calculation = self._calculate(request, question)
 
         raw = self._provider.complete_json(
             SYSTEM_PROMPT,
@@ -90,7 +104,41 @@ class AnswerService:
                 item for item in proposed.get("missingInputs", []) if isinstance(item, str)
             ),
             model=self._provider.model_name,
+            calculations=calculation,
         )
+
+    def _calculate(self, request: dict[str, Any], question: str) -> dict[str, Any] | None:
+        """Runs the rule calculators on stated facts, so the model never does arithmetic.
+
+        Facts come from the request ("facts"), or else from the query-intent analysis of the
+        question. Returns None when no calculator applies.
+        """
+        facts_body = request.get("facts")
+        if isinstance(facts_body, dict):
+            topics = facts_body.get("topics") or request.get("topics") or []
+        elif self._intent is not None:
+            try:
+                analysis = self._intent.analyse(question)
+            except ProviderError:
+                return None  # answer without a calculation rather than fail
+            facts_body = {
+                "plotArea": _measure(analysis.plot_area),
+                "roadWidth": _measure(analysis.road_width),
+                "buildingHeight": _measure(analysis.building_height),
+                "builtUpArea": _measure(analysis.built_up_area),
+                "buildingUse": analysis.building_use,
+            }
+            topics = list(analysis.topics)
+        else:
+            return None
+        try:
+            facts = calculators.facts_from_contract(facts_body)
+        except ValueError:
+            if "facts" in request:
+                raise  # the caller sent bad facts: report it as a validation error
+            return None
+        result = calculators.run(facts, list(topics))
+        return result if result["calculations"] or result["notApplicable"] else None
 
 
 def response_schema() -> dict[str, Any]:
@@ -136,6 +184,10 @@ def _user_message(
         parts.append("CALCULATION (computed by the backend; use as given):\n"
                      + json.dumps(calculation, ensure_ascii=False, indent=2))
     return "\n\n".join(parts)
+
+
+def _measure(value: Measure | None) -> dict[str, Any] | None:
+    return value.to_dict() if value else None
 
 
 def _chunks(value: Any) -> list[dict[str, str]]:

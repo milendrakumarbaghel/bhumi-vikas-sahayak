@@ -13,4 +13,4 @@ dependencies = []
 bhumi-vikas-ai-service = "ai_service.__main__:main"
 
 [tool.setuptools]
-packages = ["ai_service", "ai_service.providers", "ai_service.services"]
+packages = ["ai_service", "ai_service.calculators", "ai_service.providers", "ai_service.services"]
