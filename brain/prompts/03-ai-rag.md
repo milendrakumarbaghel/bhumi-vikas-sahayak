@@ -2,15 +2,15 @@
 
 Work in `/Users/milendrakumarbaghel/Documents/MPSeDC/bhumi-vikas-sahayak`.
 
-Implement the AI/RAG workstream using the existing Spring Boot + PostgreSQL architecture and `brain/05-ai-rag-and-amendments.md`. Read every `brain/` document and inspect current interfaces/schema before modifying code. Preserve contracts and unrelated changes.
+Implement the AI/RAG workstream in the separate top-level `ai-service/`, using its internal contract with the Spring backend and `brain/05-ai-rag-and-amendments.md`. Read every `brain/` document and inspect both services before modifying code. Preserve contracts and unrelated changes.
 
 Required behavior:
 
-- Implement hybrid retrieval: exact rule/sub-rule match, PostgreSQL full-text/trigram search, bilingual aliases and optional vector similarity behind a provider interface.
+- Keep authoritative exact/full-text retrieval and effective-date filters in the backend/PostgreSQL. Put embedding generation, semantic reranking and model-specific adapters in `ai-service/` behind internal endpoints.
 - Filter by corpus version, language metadata and legal effective date before context reaches the model.
 - Implement query intent/fact extraction for lookup, calculation, mixed, ambiguous and out-of-scope requests. Explicit user facts win unless contradictory, in which case return `NEEDS_INPUT`.
 - Support English, Hindi/Devanagari and common code-mixed/transliterated terms. Use the English JSONL as canonical machine-readable law. Do not ingest corrupted Hindi PDF extraction.
-- Introduce configurable embedding and generation provider interfaces with deterministic fakes for tests. Keep provider/model IDs in trace metadata. All keys come from environment variables.
+- Extend configurable embedding and generation interfaces inside `ai-service/` with deterministic fakes. Keep provider/model IDs in trace metadata. Provider keys exist only in the AI-service environment.
 - Require schema-constrained model output with answer segments referring only to supplied chunk IDs.
 - Implement citation validation: existing chunk ID, effective provision, exact normalized excerpt, numeric/unit consistency, and claim coverage.
 - Enrich excerpts/pages/source URLs from trusted database records, not model output.
@@ -27,7 +27,7 @@ Evaluation/tests:
 
 Deliverables:
 
-- RAG/provider/retrieval/citation code and tests integrated through existing backend interfaces.
+- AI-service provider/prompt/embedding code plus the narrow backend integration and citation-validation tests. Do not move legal authority into the AI service.
 - Configuration documentation with safe placeholders only.
 - An evaluation report with sample size, failures and known limitations; do not claim broad accuracy from the 17 seed cases.
 

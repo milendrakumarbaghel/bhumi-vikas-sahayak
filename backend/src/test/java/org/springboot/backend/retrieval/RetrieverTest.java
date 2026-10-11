@@ -4,16 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springboot.backend.llm.LlmClient;
+import org.springboot.backend.integration.ai.AiIntentClient;
 import org.springboot.backend.rules.RuleRepository;
-import tools.jackson.databind.json.JsonMapper;
 
 /** Retrieval with the offline normaliser (no API key): the right rule must be in the top chunks. */
 class RetrieverTest {
@@ -23,7 +21,7 @@ class RetrieverTest {
     @BeforeAll
     static void setUp() {
         RuleRepository rules = new RuleRepository(Path.of("../track-1-bhumi-vikas-sahayak/data/bhumi_vikas_rules.jsonl"));
-        QueryNormalizer normalizer = new QueryNormalizer(new NoLlm(), JsonMapper.builder().build());
+        QueryNormalizer normalizer = new QueryNormalizer(new NoAiService());
         retriever = new Retriever(normalizer, new RuleSearch(rules), rules);
     }
 
@@ -90,11 +88,10 @@ class RetrieverTest {
         assertThat(QueryNormalizer.offline("What is the current market rate for land in Kolar Road, Bhopal?").topics()).isEmpty();
     }
 
-    /** Stand-in for "no API key configured". */
-    static class NoLlm implements LlmClient {
-        public boolean isConfigured() { return false; }
-        public String modelName() { return "none"; }
-        public String completeJson(String s, String u, Map<String, Object> schema, Effort e) {
+    /** Stand-in for a disabled separately deployed AI service. */
+    static class NoAiService implements AiIntentClient {
+        public boolean isEnabled() { return false; }
+        public Analysis analyse(String question) {
             throw new UnsupportedOperationException();
         }
     }

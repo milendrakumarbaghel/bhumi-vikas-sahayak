@@ -1,16 +1,22 @@
 # AI, RAG and Amendment Requirements
 
+## 0. Deployment boundary
+
+All LLM provider clients, model credentials, prompts, embeddings and model-output parsing live in the separate top-level `ai-service/`. The main `backend/` contains only a narrow internal HTTP client plus deterministic verification/fallback logic. The frontend calls only the backend.
+
+The backend remains the authority for corpus versions, retrieval acceptance, legal applicability, calculations, citations and final answer status. Output from `ai-service/` is always an untrusted proposal that must be validated.
+
 ## 1. Grounding principles
 
 The system is evidence-first. Retrieval supplies candidate law, deterministic services supply numeric conclusions, and the language model explains only supported results. Fluency is never treated as evidence.
 
 Hard rules:
 
-1. The generation model receives only the user question, normalized facts, effective retrieved chunks, calculator result and response schema.
+1. Through the internal service contract, the generation model receives only the user question, normalized facts, effective retrieved chunks, calculator result and response schema.
 2. The model must reference provided chunk IDs for every legal claim.
 3. Exact excerpts come from PostgreSQL/source text after generation; the model cannot author them.
 4. A post-generation validator rejects unknown citations, ineffective provisions, excerpt mismatches, unsupported claims and calculator discrepancies.
-5. Rejected output is retried once with validation feedback or converted to `NEEDS_REVIEW`/`NOT_FOUND_IN_RULES`; it is never shown as a confident answer.
+5. The backend rejects invalid AI-service output, optionally requests one bounded retry, or converts it to `NEEDS_REVIEW`/`NOT_FOUND_IN_RULES`; it is never shown as a confident answer.
 6. Prompts and model output must not contain chain-of-thought in the API or logs. Store concise decision metadata only.
 
 ## 2. Retrieval design

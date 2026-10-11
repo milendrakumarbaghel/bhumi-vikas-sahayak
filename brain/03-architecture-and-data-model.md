@@ -11,27 +11,32 @@ React + TypeScript SPA
 Spring Boot API
   ├─ QueryController / SourceController / FeedbackController
   ├─ AnswerOrchestrator
-  │    ├─ LanguageService
-  │    ├─ HybridRetriever
+  │    ├─ deterministic fallback normalizer / HybridRetriever
   │    ├─ Applicability/EffectiveDateResolver
   │    ├─ CalculationService
-  │    ├─ GroundedGenerationProvider
   │    └─ CitationValidator
+  ├─ internal AiServiceClient (HTTP contract only)
   ├─ Ingestion/Admin services
   └─ JPA repositories + JDBC/vector query adapter
-             │
+        │                         │ internal HTTP
+        │                         ▼
+        │                 Separate AI service
+        │                   ├─ language/intent prompts
+        │                   ├─ embedding/reranking adapters
+        │                   ├─ grounded generation schema
+        │                   └─ provider clients and secrets
+        │                         │
+        │                         ▼
+        │                 Configured AI providers
+        │
 PostgreSQL
   ├─ source/corpus/provision/chunk/amendment tables
   ├─ pgvector embeddings (preferred) + PostgreSQL full-text index
   ├─ structured calculation tables
   └─ answer trace / feedback / audit records
-             │
-Configured AI providers
-  ├─ embedding model
-  └─ text-generation model
 ```
 
-The LLM is not a database and not a calculator. Spring Boot owns orchestration, applicability, version selection, numeric logic and validation. PostgreSQL owns durable sources, versions, searchable chunks and audit metadata. React only renders returned facts and gathers missing inputs.
+The LLM is not a database and not a calculator. The main backend owns public orchestration, applicability, version selection, numeric logic and citation validation. PostgreSQL owns durable sources, versions, searchable chunks and audit metadata. The separate AI service owns provider-specific code and may only propose structured intent or grounded wording. React only calls the main backend.
 
 ## 2. Backend package boundaries
 
@@ -39,7 +44,9 @@ Use feature-oriented packages under the existing `org.springboot.backend` root (
 
 ```text
 api/            controllers, request/response DTOs, exception mapping
-answer/         orchestration, statuses, grounded answer policies
+application/    use cases and answer orchestration
+integration/ai/ narrow internal HTTP client; no prompts/provider credentials
+answer/         statuses and grounded answer policies
 retrieval/      keyword/vector queries, ranking, context construction
 calculation/    fee, setback, FAR, duration and clearance calculators
 corpus/         ingestion, parsing, source/version/provision entities
@@ -47,14 +54,25 @@ amendment/      effective dating, supersession, activation workflow
 language/       detection, locale terminology and translation boundary
 citation/       excerpt matching and claim-to-source validation
 feedback/       feedback persistence
-config/         security, CORS, AI provider, Jackson and observability
+config/         security, CORS, Jackson and observability
+```
+
+Provider implementations, prompt templates and model credentials belong under the separate `ai-service/` root:
+
+```text
+org.springboot.aiservice
+api/            internal-only endpoints and internal-token checks
+application/    intent/translation/grounded-generation use cases
+llm/            provider-neutral contract and provider adapters
+embedding/      future embedding/reranking adapters
+config/         provider-only configuration
 ```
 
 Rules:
 
 - Controllers validate transport DTOs and delegate; they do not query JPA directly.
-- `AnswerOrchestrator` is transactional only where persistence is needed; AI calls must not hold a database transaction open.
-- Provider-specific AI code implements internal interfaces so the provider/model can be swapped.
+- `AnswerOrchestrator` is transactional only where persistence is needed; calls to `ai-service/` must not hold a database transaction open.
+- The backend knows only the internal service contract. Provider/model swapping happens inside `ai-service/`.
 - Calculator interfaces accept typed domain inputs and an explicit rule-set version.
 - Repositories return projections/domain objects; JPA entities do not cross the API boundary.
 - Use `ProblemDetail` (RFC 9457-style) for API errors.
@@ -131,17 +149,18 @@ The importer must be idempotent by `(source sha256, parser version, embedding mo
 5. Run hybrid retrieval: rule/term filters, full-text ranking and vector similarity; rerank while retaining scores.
 6. If calculation is required, validate extracted inputs and either request missing fields or execute a versioned Java calculator.
 7. Build a bounded context containing immutable chunk IDs and exact text.
-8. Ask the generation provider for structured output whose claims reference supplied chunk IDs only.
+8. Call the internal AI service for structured wording whose claims reference supplied chunk IDs only.
 9. Validate cited IDs, excerpt matches, effective dates, calculation consistency and claim coverage.
 10. Fail closed to `NOT_FOUND_IN_RULES` or `NEEDS_REVIEW` when evidence/validation is insufficient.
 11. Persist a redacted trace and return the typed response.
 
 ## 7. Deployment/configuration requirements
 
-- Externalize `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, AI provider key, allowed origins and retention settings.
+- Backend externalizes `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `BVS_AI_SERVICE_URL`, `BVS_AI_SERVICE_TOKEN`, allowed origins and retention settings.
+- Only `ai-service/` receives provider keys/model configuration. Production requires a non-empty internal token and private network path; do not expose its internal API to browsers.
 - Use separate Spring profiles for local/test/production; test uses Testcontainers PostgreSQL with pgvector where supported.
 - Package official PDFs as versioned read-only resources or serve from controlled object storage.
 - Do not send database secrets or entire PDFs to the browser or model provider.
-- Define connection/time/read timeouts and circuit breakers for AI calls.
+- Define connection/read timeouts and circuit breakers for backend-to-AI-service and AI-service-to-provider calls. Backend must retain deterministic fallback behavior.
 - Log structured IDs and status, not secrets, raw prompts or personal information.
 - Use separate database roles for migrations and runtime reads/writes.

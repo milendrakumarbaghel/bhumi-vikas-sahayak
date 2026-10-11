@@ -189,3 +189,13 @@ Use `400` malformed JSON, `401/403` authentication/authorization, `404` unknown 
 - Generate or verify TypeScript DTOs from the contract to prevent frontend/backend drift.
 - Additive fields are allowed within v1; breaking semantic/schema changes require `/api/v2`.
 - Enumerations must include a safe client fallback (`UNKNOWN`) or version negotiation strategy.
+
+## 9. Internal AI-service contract
+
+The following endpoint is service-to-service only and is not part of the browser API:
+
+`POST http://ai-service/internal/v1/query-intents`
+
+The backend sends `{ "question": "..." }` plus `X-Internal-Token` when configured. The service returns proposed language, English translation, search terms, topic codes, raw explicitly stated measurements, building use, explicit rule references and model identifier. It does not return a legal answer or citations.
+
+The backend must independently verify that every proposed number occurs in the original question, normalize units, ignore unknown topics and fall back to deterministic parsing on timeout, invalid response, authorization failure or service unavailability. The frontend must never call this endpoint or receive its token/provider configuration.

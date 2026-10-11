@@ -5,7 +5,8 @@ This folder is the implementation specification for turning the current reposito
 The specification is tailored to the code and data presently in this repository:
 
 - Frontend: React 19, TypeScript 6 and Vite 8.
-- Backend: Spring Boot 4, Java 25, Spring MVC, Spring Data JPA and Spring Security.
+- Backend: Spring Boot 4 and Java 25 for public APIs, deterministic rules, calculations, citations and persistence.
+- AI service: a separate top-level Spring Boot service for provider credentials, prompts, embeddings and LLM calls.
 - Database: PostgreSQL (currently configured as a hosted Neon database).
 - Legal corpus: 106 JSONL records covering Rules 1-105 plus Rule 26-B, the page-separated English text, and official English/Hindi PDFs consolidated through 6 March 2025.
 
@@ -15,7 +16,7 @@ The specification is tailored to the code and data presently in this repository:
 2. [Product requirements](02-product-requirements.md) - users, workflows, functional requirements, bilingual behavior, calculations, citations and safeguards.
 3. [Architecture and data model](03-architecture-and-data-model.md) - React/Spring/PostgreSQL design, component boundaries, schema and processing flows.
 4. [API contract](04-api-contract.md) - proposed REST endpoints and typed request/response/error shapes.
-5. [AI, RAG and amendment requirements](05-ai-rag-and-amendments.md) - ingestion, retrieval, grounding, Hindi/English handling, citations, refusal behavior and versioning.
+5. [AI, RAG and amendment requirements](05-ai-rag-and-amendments.md) - the separate AI-service boundary, grounding, Hindi/English handling, citations, refusal behavior and versioning.
 6. [Testing and delivery plan](06-testing-and-delivery-plan.md) - test pyramid, evaluation set, acceptance gates and prioritized implementation sequence.
 7. [Implementation prompt index](prompts/README.md) - separate, copy-ready prompts for each workstream and a recommended execution order.
 

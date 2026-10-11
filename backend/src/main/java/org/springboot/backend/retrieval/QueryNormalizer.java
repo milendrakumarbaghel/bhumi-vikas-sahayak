@@ -2,12 +2,9 @@ package org.springboot.backend.retrieval;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -15,174 +12,105 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springboot.backend.calc.Units;
-import org.springboot.backend.llm.LlmClient;
-import org.springboot.backend.llm.LlmException;
+import org.springboot.backend.integration.ai.AiIntentClient;
+import org.springboot.backend.integration.ai.AiServiceException;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Turns an English or Hindi question into English search terms plus a structured
- * {@link QueryIntent}. Uses Claude when an API key is set; otherwise (or if Claude fails)
- * uses a keyword-and-regex fallback so search still works offline.
+ * Converts a question into deterministic backend search input. The separate AI
+ * service may propose an intent; this class verifies its numbers and retains a
+ * local parser as a fail-safe.
  */
 @Component
 public class QueryNormalizer {
 
     private static final Logger log = LoggerFactory.getLogger(QueryNormalizer.class);
 
-    private final LlmClient llm;
-    private final JsonMapper json;
+    private final AiIntentClient aiService;
 
-    public QueryNormalizer(LlmClient llm, JsonMapper json) {
-        this.llm = llm;
-        this.json = json;
+    public QueryNormalizer(AiIntentClient aiService) {
+        this.aiService = aiService;
     }
 
     public QueryIntent normalize(String question) {
-        String q = Normalizer.normalize(question, Normalizer.Form.NFC).strip();
-        if (llm.isConfigured()) {
+        String normalized = Normalizer.normalize(question, Normalizer.Form.NFC).strip();
+        if (aiService.isEnabled()) {
             try {
-                return withClaude(q);
-            } catch (LlmException | IllegalArgumentException e) {
-                // Never log the question itself.
-                log.warn("Claude normalisation failed, using offline fallback: {}", e.getMessage());
+                return fromAiService(normalized, aiService.analyse(normalized));
+            } catch (AiServiceException | IllegalArgumentException e) {
+                // Questions may contain sensitive property context, so never log them.
+                log.warn("AI intent service unavailable or invalid; using offline parser: {}", e.getMessage());
             }
         }
-        return offline(q);
+        return offline(normalized);
     }
 
-    // ---------------------------------------------------------------- Claude
-
-    private static final String SYSTEM_PROMPT = """
-            You prepare search input for a tool that answers questions on the Madhya Pradesh \
-            Bhumi Vikas Rules, 2012 (English text). The user is a building-permission clerk at \
-            the Bhopal Municipal Corporation. Questions come in English, Hindi (Devanagari) or \
-            romanised Hindi.
-
-            Fill the fields as follows:
-            - language: "hi" if the question is written mainly in Hindi (Devanagari or romanised), else "en".
-            - english_question: a faithful English translation. Do not add facts.
-            - search_terms: 5 to 15 English keywords phrased the way Indian building bye-laws \
-            phrase them, e.g. "front open space", "floor area ratio", "permission fee", "built up area".
-            - topics: every topic from the list below that the question is about (may be empty).
-            - plot_area, road_width, building_height, built_up_area: copy ONLY numbers the question \
-            states, with the unit exactly as stated. Never convert units, never calculate, never guess; \
-            use null when the question does not state the value. "gaj" means sqyd. The width of the \
-            road or street in front of the plot is road_width; the building's own height is building_height.
-            - building_use: the use the question states, else "unknown".
-            - rule_refs: rule numbers the question names explicitly, e.g. "21" or "2(5)(c)"; else empty.
-
-            Topics:
-            """ + topicList();
-
-    private static String topicList() {
-        StringBuilder sb = new StringBuilder();
-        for (Topic t : Topic.values()) {
-            sb.append("- ").append(t.name()).append(": ").append(t.description).append('\n');
-        }
-        return sb.toString();
-    }
-
-    private static final Map<String, Object> SCHEMA = buildSchema();
-
-    private static Map<String, Object> buildSchema() {
-        Map<String, Object> props = new LinkedHashMap<>();
-        props.put("language", Map.of("type", "string", "enum", List.of("en", "hi")));
-        props.put("english_question", Map.of("type", "string"));
-        props.put("search_terms", Map.of("type", "string"));
-        props.put("topics", Map.of("type", "array", "items",
-                Map.of("type", "string", "enum", Arrays.stream(Topic.values()).map(Enum::name).toList())));
-        props.put("plot_area", nullableMeasure(List.of("sqm", "sqft", "sqyd")));
-        props.put("road_width", nullableMeasure(List.of("m", "ft")));
-        props.put("building_height", nullableMeasure(List.of("m", "ft")));
-        props.put("built_up_area", nullableMeasure(List.of("sqm", "sqft", "sqyd")));
-        props.put("building_use", Map.of("type", "string", "enum",
-                List.of("residential", "commercial", "shop_cum_residence", "industrial", "public", "agricultural", "other", "unknown")));
-        props.put("rule_refs", Map.of("type", "array", "items", Map.of("type", "string")));
-        return Map.of(
-                "type", "object",
-                "properties", props,
-                "required", List.copyOf(props.keySet()),
-                "additionalProperties", false);
-    }
-
-    private static Map<String, Object> nullableMeasure(List<String> units) {
-        Map<String, Object> measure = Map.of(
-                "type", "object",
-                "properties", Map.of(
-                        "value", Map.of("type", "number"),
-                        "unit", Map.of("type", "string", "enum", units)),
-                "required", List.of("value", "unit"),
-                "additionalProperties", false);
-        return Map.of("anyOf", List.of(measure, Map.of("type", "null")));
-    }
-
-    private QueryIntent withClaude(String question) {
-        String reply = llm.completeJson(SYSTEM_PROMPT, "Question:\n" + question, SCHEMA, LlmClient.Effort.low);
-        JsonNode n = json.readTree(reply);
-
+    private static QueryIntent fromAiService(String question, AiIntentClient.Analysis analysis) {
         List<Topic> topics = new ArrayList<>();
-        for (JsonNode t : n.path("topics")) {
-            topics.add(Topic.valueOf(t.asString()));
+        for (String value : analysis.topics()) {
+            try {
+                topics.add(Topic.valueOf(value));
+            } catch (IllegalArgumentException ignored) {
+                // A newer AI-service topic is ignored until this backend supports it.
+            }
         }
-        List<String> refs = new ArrayList<>();
-        n.path("rule_refs").forEach(r -> refs.add(r.asString()));
-        String use = n.path("building_use").asString("unknown");
-
         Set<Double> statedNumbers = numbersIn(question);
+        String use = analysis.buildingUse();
         return new QueryIntent(
-                n.path("language").asString("en"),
-                n.path("english_question").asString(question),
-                n.path("search_terms").asString(""),
-                topics,
-                area(n.path("plot_area"), statedNumbers),
-                length(n.path("road_width"), statedNumbers),
-                length(n.path("building_height"), statedNumbers),
-                area(n.path("built_up_area"), statedNumbers),
-                "unknown".equals(use) ? null : use,
-                refs,
-                "claude");
+                "hi".equals(analysis.language()) ? "hi" : "en",
+                blankTo(analysis.englishQuestion(), question),
+                blankTo(analysis.searchTerms(), question),
+                List.copyOf(topics),
+                area(analysis.plotArea(), statedNumbers),
+                length(analysis.roadWidth(), statedNumbers),
+                length(analysis.buildingHeight(), statedNumbers),
+                area(analysis.builtUpArea(), statedNumbers),
+                use == null || use.isBlank() || "unknown".equals(use) ? null : use,
+                analysis.ruleRefs() == null ? List.of() : List.copyOf(analysis.ruleRefs()),
+                "ai-service");
     }
 
-    /** Keeps a number from Claude only if the question really contains it. */
-    private static Double area(JsonNode measure, Set<Double> stated) {
-        if (!measure.isObject() || !stated.contains(measure.path("value").asDouble())) {
-            return null;
-        }
-        return Units.areaToSqm(measure.path("value").asDouble(), measure.path("unit").asString());
+    private static String blankTo(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
-    private static Double length(JsonNode measure, Set<Double> stated) {
-        if (!measure.isObject() || !stated.contains(measure.path("value").asDouble())) {
+    /** Accept a proposed number only if that exact number occurs in the question. */
+    private static Double area(AiIntentClient.Measure measure, Set<Double> stated) {
+        if (measure == null || measure.value() == null || !stated.contains(measure.value())) {
             return null;
         }
-        return Units.lengthToM(measure.path("value").asDouble(), measure.path("unit").asString());
+        return Units.areaToSqm(measure.value(), measure.unit());
+    }
+
+    private static Double length(AiIntentClient.Measure measure, Set<Double> stated) {
+        if (measure == null || measure.value() == null || !stated.contains(measure.value())) {
+            return null;
+        }
+        return Units.lengthToM(measure.value(), measure.unit());
     }
 
     private static final Pattern NUMBER = Pattern.compile("\\d+(?:\\.\\d+)?");
 
     static Set<Double> numbersIn(String text) {
         Set<Double> numbers = new LinkedHashSet<>();
-        Matcher m = NUMBER.matcher(asciiDigits(text).replace(",", ""));
-        while (m.find()) {
-            numbers.add(Double.parseDouble(m.group()));
+        Matcher matcher = NUMBER.matcher(asciiDigits(text).replace(",", ""));
+        while (matcher.find()) {
+            numbers.add(Double.parseDouble(matcher.group()));
         }
         return numbers;
     }
 
-    /** Devanagari digits (०-९) to ASCII. */
     static String asciiDigits(String text) {
-        StringBuilder sb = new StringBuilder(text.length());
-        for (char c : text.toCharArray()) {
-            sb.append(c >= '०' && c <= '९' ? (char) ('0' + (c - '०')) : c);
+        StringBuilder result = new StringBuilder(text.length());
+        for (char character : text.toCharArray()) {
+            result.append(character >= '०' && character <= '९'
+                    ? (char) ('0' + (character - '०'))
+                    : character);
         }
-        return sb.toString();
+        return result.toString();
     }
 
-    // ---------------------------------------------------------------- offline fallback
-
-    /** Common Hindi words in counter questions and their English bye-law terms. */
+    /** Common Hindi terms used only by the backend's deterministic fallback. */
     private static final String[][] HINDI_GLOSSARY = {
             {"प्लॉट", "plot"}, {"भूखंड", "plot"}, {"वर्ग मीटर", "square meters"}, {"सड़क", "road street"},
             {"चौड़ी", "width"}, {"चौड़ाई", "width"}, {"आगे", "front"}, {"सामने", "front"}, {"पीछे", "rear"},
@@ -232,14 +160,14 @@ public class QueryNormalizer {
         }
 
         List<Topic> topics = new ArrayList<>();
-        for (Topic t : Topic.values()) {
-            if (t.cue.matcher(q).find() || t.cue.matcher(english).find()) {
-                topics.add(t);
+        for (Topic topic : Topic.values()) {
+            if (topic.cue.matcher(q).find() || topic.cue.matcher(english).find()) {
+                topics.add(topic);
             }
         }
 
         StringBuilder terms = new StringBuilder(english);
-        topics.forEach(t -> terms.append(' ').append(t.searchWords));
+        topics.forEach(topic -> terms.append(' ').append(topic.searchWords));
 
         Double plot = null;
         Double builtUp = null;
@@ -259,7 +187,9 @@ public class QueryNormalizer {
             refs.add(ref.group(1).replace(" ", ""));
         }
 
-        String use = RESIDENTIAL.matcher(q).find() ? "residential" : COMMERCIAL.matcher(q).find() ? "commercial" : null;
+        String use = RESIDENTIAL.matcher(q).find()
+                ? "residential"
+                : COMMERCIAL.matcher(q).find() ? "commercial" : null;
 
         return new QueryIntent(
                 hindi ? "hi" : "en",
@@ -268,7 +198,9 @@ public class QueryNormalizer {
                 topics,
                 plot,
                 firstLength(q, ROAD),
-                firstLength(q, HEIGHT_AFTER) != null ? firstLength(q, HEIGHT_AFTER) : firstLength(q, HEIGHT_BEFORE),
+                firstLength(q, HEIGHT_AFTER) != null
+                        ? firstLength(q, HEIGHT_AFTER)
+                        : firstLength(q, HEIGHT_BEFORE),
                 builtUp,
                 use,
                 refs,
@@ -276,21 +208,21 @@ public class QueryNormalizer {
     }
 
     private static Double firstLength(String text, Pattern pattern) {
-        Matcher m = pattern.matcher(text);
-        if (!m.find()) {
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) {
             return null;
         }
-        String unit = m.group(2).toLowerCase(Locale.ROOT);
+        String unit = matcher.group(2).toLowerCase(Locale.ROOT);
         boolean feet = unit.startsWith("f") || unit.equals("फीट") || unit.equals("फुट");
-        return Units.lengthToM(Double.parseDouble(m.group(1)), feet ? "ft" : "m");
+        return Units.lengthToM(Double.parseDouble(matcher.group(1)), feet ? "ft" : "m");
     }
 
     private static String areaUnit(String unitText) {
-        String u = unitText.toLowerCase(Locale.ROOT);
-        if (u.contains("f") || u.contains("फ")) {
+        String unit = unitText.toLowerCase(Locale.ROOT);
+        if (unit.contains("f") || unit.contains("फ")) {
             return "sqft";
         }
-        if (u.contains("yd") || u.contains("yard") || u.contains("गज") || u.contains("gaj")) {
+        if (unit.contains("yd") || unit.contains("yard") || unit.contains("गज") || unit.contains("gaj")) {
             return "sqyd";
         }
         return "sqm";

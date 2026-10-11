@@ -6,17 +6,17 @@ Build the Spring Boot backend API for Bhumi Vikas Sahayak using the existing Jav
 
 Implement:
 
-- Feature-oriented packages for API, answer orchestration, retrieval interfaces, calculation interfaces, corpus, language, citation, feedback and configuration.
+- Extend the existing `api`, `application`, `calc`, `config`, `integration/ai`, `retrieval` and `rules` boundaries with answer, corpus, amendment, citation and feedback features.
 - `/api/v1/questions:answer`, source/rule endpoints, calculator dispatch endpoints, feedback, `/api/v1/meta`, and health/readiness behavior from `brain/04-api-contract.md`.
 - Typed request/response DTOs. Model semantic answer states explicitly: `ANSWERED`, `NEEDS_INPUT`, `NOT_FOUND_IN_RULES`, `NEEDS_REVIEW` and system errors.
 - RFC-style Spring `ProblemDetail` responses with stable codes and request IDs.
-- An `AnswerOrchestrator` that establishes Asia/Kolkata `asOfDate`, validates/normalizes facts, selects active corpus, calls retrieval/calculation/generation abstractions, validates citations, persists a redacted trace and fails closed.
+- An `AnswerOrchestrator` that establishes Asia/Kolkata `asOfDate`, validates/normalizes facts, selects active corpus, calls retrieval/calculation and the internal AI-service client, validates citations, persists a redacted trace and fails closed.
 - Exact source/citation enrichment from database records; never accept model-authored page numbers/excerpts.
 - Safe Spring Security configuration: explicitly define public query/source/meta/health access and protected admin endpoints. Configure CORS from environment. Do not disable protections broadly without documenting why.
 - Input size/range validation, safe errors, structured redacted logs, timeouts and provider failure mapping.
 - OpenAPI 3.1 output suitable for TypeScript client generation.
 
-Use interfaces/fakes for AI, retrieval and calculators where their implementations are not yet present. Do not add a fake confident answer path. A missing provider/evidence must yield a safe status/error.
+Do not add provider SDKs, prompts, provider keys or model-specific response parsing to `backend/`; those belong in `ai-service/`. Use the existing narrow internal client and deterministic fakes. A missing service/evidence must yield a safe status/error.
 
 Tests:
 

@@ -27,6 +27,15 @@ Required tests:
 - Citation validation: invalid ID, excerpt mismatch, ineffective provision, missing claim evidence and numeric mismatch.
 - Status decision logic for not found, ambiguity, missing facts and provider failure.
 - Log/query redaction.
+- Backend-to-AI-service contract parsing, unknown-topic tolerance, measurement re-verification and deterministic fallback on timeout/unavailability.
+
+### Separate AI-service tests
+
+- Provider configuration absent, provider timeout/rate limit/refusal and malformed structured output.
+- Internal-token authorization and no public CORS exposure.
+- Prompt/schema versioning and model metadata.
+- Hallucinated measurements are removed before response; the backend independently repeats this validation.
+- Deterministic fake provider tests require no network or paid API.
 
 ### Spring MVC/API tests
 

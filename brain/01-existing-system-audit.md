@@ -2,108 +2,115 @@
 
 ## Executive assessment
 
-The repository has the intended technology foundations and a strong source-data pack, but it does not yet implement Bhumi Vikas Sahayak. The frontend and backend are generated starter applications. PostgreSQL connectivity is configured, but there is no domain schema or persistence code. There is no retrieval, AI, bilingual answer, citation, calculation, amendment, or evaluation implementation.
+The repository now has three explicit runtime boundaries:
 
-## Repository evidence
+- `frontend/`: React 19 + TypeScript + Vite user interface (still the starter UI).
+- `backend/`: public Spring Boot API, deterministic rule ingestion/cleaning, Lucene retrieval, unit validation and the future calculation/citation boundary.
+- `ai-service/`: separate Spring Boot internal service containing LLM prompts, provider credentials and provider HTTP integration.
 
-| Area | Evidence found | Status | Assessment |
+The source-data and retrieval foundations are usable and tested. The complete clerk-answer workflow, PostgreSQL persistence, final grounded generation, citations UI, deterministic legal calculators and amendment activation are still missing.
+
+## Current implementation status
+
+| Area | Evidence | Status | Assessment |
 |---|---|---:|---|
-| React application | `frontend/src/App.tsx`, `main.tsx`, CSS, Vite and TypeScript configs | Partially completed | React 19 + TypeScript + Vite boots as a scaffold. `App.tsx` is still the Vite counter/get-started UI. |
-| Frontend product UX | No question form, answer view, citation component, language control, calculator inputs, history, API client or error states | Missing | No Track 1 workflow is present. |
-| Backend application | One `@SpringBootApplication` launcher | Partially completed | Spring Boot wiring exists, but there are no controllers, services, DTOs, entities, repositories or exception handlers. |
-| REST API | No controller classes or endpoint definitions | Missing | The frontend cannot query the backend. |
-| PostgreSQL driver/JPA | PostgreSQL runtime driver and Spring Data JPA in `pom.xml` | Partially completed | Dependencies exist, but no tables, entities, repositories, migrations or seed process exist. |
-| Database configuration | Datasource URL, username and password in `application.properties`; Hibernate `ddl-auto=update` | Partially completed / unsafe | Connectivity is declared but not verified. Credentials are committed in plaintext, schema changes are nondeterministic, and `open-in-view=true` is unsuitable for an explicit API boundary. |
-| Security | Spring Security dependency and test dependency | Partially completed | No `SecurityFilterChain`, authentication model, CORS policy, rate limiting or authorization behavior is implemented. Default Spring Security behavior may block API calls. |
-| Rule corpus | Full JSONL, sample JSONL, page-separated English text, official English/Hindi PDFs | Completed as source assets | The dataset includes 106 records: Rules 1-105 and 26-B, with rule/title/part/page range/text. |
-| Corpus caveats | Data dictionary and participant guide identify flattened tables, running headers, embedded inserted rules and amendment footnotes | Completed as documentation | These caveats must be handled during ingestion and evaluation. |
-| 2026 amendment | Mentioned in project documentation but not included in the JSONL/PDF corpus | Partially completed | Awareness exists; authoritative amendment content, structured supersession and effective-date logic are absent. |
-| RAG / search | No embedding model, vector extension, text search, index, ingestion job or retriever | Missing | No retrieval pipeline exists. |
-| LLM generation | No AI SDK/provider config, prompt, grounding checks or answer service | Missing | No generated answers exist. |
-| Citations | Rule metadata exists in JSONL | Partially completed | Citation source fields exist, but nothing creates/verifies/displays citations or excerpts. |
-| Hindi/English | Official PDFs and two Hindi test questions exist | Partially completed | No language detection, Devanagari UI, bilingual retrieval, translation or Hindi answer generation exists. Hindi PDF extraction is explicitly unreliable. |
-| Numerical calculations | Numeric rule tables are present in the corpus | Partially completed | Values exist, but there is no deterministic fee/setback/FAR/duration/clearance calculator or boundary validation. |
-| Backend tests | One `contextLoads()` test | Partially completed | Test harness exists; it does not test product behavior and may require the configured external database. |
-| Frontend tests | ESLint configuration only | Missing | No unit, component, accessibility or end-to-end test framework/configuration exists. |
-| Evaluation | Seventeen sample questions, including two out-of-domain questions | Partially completed | A useful seed set exists, but expected answers, grading, bilingual parity and regression automation are absent. |
-| Operations | No Dockerfile, Compose, CI workflow, health/readiness design, logging policy or deployment config found | Missing | There is no reproducible full-stack operating path. |
-| Project delivery docs | Root README describes event and source pack | Partially completed | It does not identify a team, provide a <=5-step application runbook, disclose app limitations, or include app architecture. No license was found. |
+| React frontend | `frontend/src/App.tsx`, Vite/TypeScript config | Partially completed | Toolchain exists; screen is still the Vite starter and does not call the API. |
+| Backend structure | `api/`, `application/`, `calc/`, `config/`, `integration/ai/`, `retrieval/`, `rules/` | Partially completed | Clear public API/use-case/domain/integration boundaries now exist. |
+| Rule catalogue API | `GET /api/rules`, `GET /api/rules/{ruleNumber}`, `GET /api/health` | Completed foundation | Exposes cleaned rule data, inserted-rule focus and corpus version. Not yet the final v1 contract. |
+| Search API | `POST /api/search` | Completed foundation | Returns normalized intent plus top Lucene rule chunks. It is retrieval/debug output, not a final legal answer. |
+| Corpus loading | `RuleRepository`, `RuleTextCleaner`, `RuleChunker` | Completed foundation | Loads 106 JSONL records, removes running headers, tracks pages and detects six embedded inserted rules. |
+| Lexical retrieval | `RuleSearch`, `Retriever`, `Topic` | Completed foundation | In-memory Lucene BM25 plus explicit/topic-pinned rules; not PostgreSQL/hybrid/vector retrieval. |
+| Hindi/English query normalization | deterministic fallback plus optional internal AI intent client | Partially completed | Seed Hindi terms and numeric extraction work; broad bilingual coverage/evaluation is missing. |
+| AI separation | Top-level `ai-service/`; backend only has `AiIntentClient` HTTP adapter | Completed architecture boundary | Provider prompt/key/client no longer exist in `backend/`. Frontend never calls AI service directly. |
+| AI service behavior | Internal `POST /internal/v1/query-intents`, provider-neutral interface and Anthropic adapter | Partially completed | Intent extraction only. No grounded answer-generation or embedding endpoint yet. |
+| Failure behavior | Backend falls back locally if AI service is disabled/unavailable/invalid | Completed foundation | Retrieval remains usable without an LLM. Final answer safe-status behavior remains missing. |
+| Numerical validation | Backend rejects AI-proposed measurements not present in the question; unit conversions exist | Partially completed | Legal fee/setback/FAR/duration/clearance calculators are missing; current utility uses `double`, not final `BigDecimal` legal calculations. |
+| Citations | Rule/chunk/page metadata exists in retrieval results | Partially completed | No claim-to-citation validator, exact excerpt contract, official PDF viewer or final answer mapping. |
+| PostgreSQL | No current datasource/JPA/Flyway configuration in the generated backend | Missing | The earlier exposed datasource configuration is no longer present, but the target database model/migrations are not implemented. |
+| Amendment handling | Version warning constants identify the unverified 28 August 2026 issue | Partially completed | No effective-dated provision schema, authoritative amendment source or activation workflow. |
+| Backend tests | 44 tests for retrieval, data loading, chunking and cleaning | Partially completed | Useful foundation; controller/integration/calculator/citation tests remain missing. |
+| AI-service tests | Test verifies hallucinated measurements are removed | Partially completed | Provider/controller/auth/failure/contract coverage remains thin. |
+| Frontend tests | ESLint config only | Missing | No component/accessibility/E2E suite. |
+| Operations | Separate ports/config and service READMEs | Partially completed | No Compose, CI, container images, observability or deployment network policy. |
 
-## Existing configuration risks
+## Service ownership
 
-### Critical: exposed PostgreSQL credential
+### Backend owns
 
-`backend/src/main/resources/application.properties` contains a plaintext hosted-database password. Treat it as compromised even if the database is disposable.
+- Public browser-facing APIs and validation.
+- Rule corpus loading, cleaning, chunking and official page metadata.
+- Deterministic lexical retrieval and safe fallback parsing.
+- Unit verification, deterministic legal calculators and amendment/effective-date resolution.
+- Citation validation, answer status, auditing and PostgreSQL persistence.
+- Calling the AI service through a narrow internal interface.
 
-Required remediation before development or publication:
+### AI service owns
 
-1. Rotate/revoke the exposed credential at the database provider.
-2. Read URL, username and password from environment variables or a secret manager.
-3. Commit only safe placeholders and a documented `.env.example` without secrets.
-4. Review repository history and provider access logs; removing the current line alone does not remove historical exposure.
-5. Use least-privilege application and migration roles.
+- LLM provider credentials and HTTP/SDK integrations.
+- Provider/model configuration, prompts and structured generation schemas.
+- Hindi/English translation and query-intent proposals.
+- Future embeddings/reranking and grounded-language generation, once implemented.
+- No final legal decision, table-row selection, calculation or citation authority.
 
-### Database lifecycle
+### Frontend owns
 
-`spring.jpa.hibernate.ddl-auto=update` can silently mutate shared environments. The target system must use versioned Flyway migrations, with Hibernate validation in deployed environments. `spring.jpa.open-in-view=true` should be disabled so database access remains inside service transactions.
+- Clerk query/follow-up interaction and bilingual presentation.
+- Rendering only backend-validated answers, calculations, citations, warnings and safe statuses.
+- It must never receive provider credentials or directly call `ai-service/`.
 
-### Default security behavior
+## Configuration and security findings
 
-Adding Spring Security without an explicit configuration normally secures application endpoints by default. The implementation must deliberately define public/internal endpoints, CORS, CSRF behavior and any clerk authentication rather than relying on defaults.
+- The previous plaintext hosted PostgreSQL credential is absent from the current backend configuration. Because it was once committed/shared, it must still be rotated/revoked at the provider and repository history reviewed.
+- `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` now belong only to the AI-service process.
+- `BVS_AI_SERVICE_TOKEN` protects the internal endpoint when set. Production must require a non-empty token and network-level isolation; the blank-token behavior is local-development convenience only.
+- Backend logs intentionally omit user question text on AI-service failure.
+- The AI-service returns a generic provider-failure message rather than forwarding provider response details.
 
-## Data fitness and gaps
+## Source data status
 
-### Ready to use
+Completed assets:
 
-- JSONL supplies `rule`, `title`, `part`, `page_start`, `page_end` and full English `text`.
-- The English PDF is identified as the source of truth through 6 March 2025.
-- The Hindi PDF provides an official visual reference.
-- Sample questions cover retrieval, table lookup, calculations, cross-rule questions, Hindi and out-of-domain refusal.
+- 106 JSONL records: Rules 1-105 plus Rule 26-B.
+- English page-separated text and official English/Hindi PDFs.
+- Rule/title/part/page/text metadata.
+- Seventeen seed questions including Hindi and not-found cases.
 
-### Must be normalized or curated
+Remaining data work:
 
-- Remove running page headers from searchable chunks while preserving original text separately.
-- Segment sub-rules and tables without losing parent rule context.
-- Represent inserted Rules 12-A, 17-a, 25(A), 26-A, 42-A and 93(a), which are embedded in parent records; only 26-B has its own JSONL row.
-- Convert important tables into reviewed structured rows for deterministic calculations.
-- Preserve amendment footnotes and link them to the exact provision changed.
-- Add the 28 August 2026 Rule 2(5)(c) amendment as a separately sourced, effective-dated record after authoritative verification.
-- Curate Hindi terminology/aliases because the legacy-font Hindi PDF is unsuitable as the primary machine-readable input.
+- PostgreSQL/Flyway source, corpus, provision, chunk and amendment schema.
+- Reviewed structured rows for numeric tables.
+- Authoritative official text for the 28 August 2026 Rule 2(5)(c) amendment.
+- Reviewed Hindi aliases/excerpts; legacy-font extraction must not be treated as authoritative.
+- Versioned ingestion, checksums, activation and rollback.
 
-## Current capability summary
+## Completed, partial and missing summary
 
-### Completed
+### Completed foundations
 
-- Repository split into frontend, backend and Track 1 data/resources.
-- React/TypeScript/Vite scaffold.
-- Spring Boot/MVC/JPA/Security/PostgreSQL dependency scaffold.
-- English rule dataset and official source PDFs.
-- Data dictionary, problem statement and 17 seed questions.
+- Clean separation of browser API/backend from LLM/provider service.
+- Rule-file ingestion, cleaning, embedded-rule discovery and chunking.
+- In-memory lexical retrieval with bilingual offline query cues.
+- Optional AI intent analysis with deterministic fallback.
+- Unit and data-integrity regression tests for current foundations.
 
 ### Partially completed
 
-- PostgreSQL connection configuration.
-- Backend and frontend toolchains.
-- Citation metadata in the source dataset.
-- Bilingual source availability.
-- Numerical rule content availability.
-- Minimal backend test harness and frontend linting.
-- Awareness of the August 2026 amendment.
+- Spring backend API and layered package structure.
+- Bilingual intent normalization and rule citations metadata.
+- AI internal service and shared-token protection.
+- Rule version/cutoff warning.
+- Automated backend/AI-service testing.
 
 ### Missing
 
-- All user-facing product behavior.
-- Domain model and database migrations.
-- Corpus ingestion and version control.
-- Hybrid retrieval and LLM integration.
-- Citation verification and source viewer.
-- Hindi/English query and answer pipeline.
-- Deterministic numerical calculation engine.
-- Amendment ingestion, activation and supersession.
-- REST APIs and generated frontend client/types.
-- Authentication/authorization decisions and security configuration.
-- Meaningful automated tests, RAG evaluation and operational readiness.
+- Product frontend and typed v1 client.
+- PostgreSQL entities/migrations/ingestion/search.
+- Final `questions:answer` orchestration and explicit safe statuses.
+- Deterministic legal calculators.
+- Grounded answer generation and citation validation.
+- Effective-dated amendments and maker-checker activation.
+- Full security, observability, evaluation, CI and deployment setup.
 
 ## Inspection limits
 
-This audit is static. Frontend dependencies were not installed, no live PostgreSQL connection was attempted, and no external model or amendment source was called. The participant guide PDF was visually checked at its opening page and cross-checked against the repository's Markdown guide; PDF text tooling was unavailable in the environment. These limits do not affect the implementation-status findings because the application source contains no product feature code.
+Status is based on repository code and local tests. No live database, external LLM provider or government system was contacted. The official August 2026 amendment text remains unverified and must not be activated from the secondary summary link.

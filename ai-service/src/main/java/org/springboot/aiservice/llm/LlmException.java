@@ -1,4 +1,4 @@
-package org.springboot.backend.llm;
+package org.springboot.aiservice.llm;
 
 public class LlmException extends RuntimeException {
 
