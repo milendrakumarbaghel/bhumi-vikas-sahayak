@@ -5,30 +5,30 @@
 The repository now has three explicit runtime boundaries:
 
 - `frontend/`: React 19 + TypeScript + Vite user interface (still the starter UI).
-- `backend/`: public Spring Boot API, deterministic rule ingestion/cleaning, Lucene retrieval, unit validation and the future calculation/citation boundary.
+- `backend/`: public Spring Boot API under `org.springboot.backend`, PostgreSQL/Flyway persistence, rule import/retrieval, citation validation and deterministic calculation services.
 - `ai-service/`: separate Python internal service containing LLM prompts, provider credentials and provider HTTP integration.
 
-The source-data and retrieval foundations are usable and tested. The complete clerk-answer workflow, PostgreSQL persistence, final grounded generation, citations UI, deterministic legal calculators and amendment activation are still missing.
+The source-data, database schema, import, retrieval and assistant API foundations are usable and tested. The frontend, broader calculators, grounded generation, production amendment activation and operational hardening remain incomplete.
 
 ## Current implementation status
 
 | Area | Evidence | Status | Assessment |
 |---|---|---:|---|
 | React frontend | `frontend/src/App.tsx`, Vite/TypeScript config | Partially completed | Toolchain exists; screen is still the Vite starter and does not call the API. |
-| Backend structure | `api/`, `application/`, `calc/`, `config/`, `integration/ai/`, `retrieval/`, `rules/` | Partially completed | Clear public API/use-case/domain/integration boundaries now exist. |
-| Rule catalogue API | `GET /api/rules`, `GET /api/rules/{ruleNumber}`, `GET /api/health` | Completed foundation | Exposes cleaned rule data, inserted-rule focus and corpus version. Not yet the final v1 contract. |
-| Search API | `POST /api/search` | Completed foundation | Returns normalized intent plus top Lucene rule chunks. It is retrieval/debug output, not a final legal answer. |
-| Corpus loading | `RuleRepository`, `RuleTextCleaner`, `RuleChunker` | Completed foundation | Loads 106 JSONL records, removes running headers, tracks pages and detects six embedded inserted rules. |
-| Lexical retrieval | `RuleSearch`, `Retriever`, `Topic` | Completed foundation | In-memory Lucene BM25 plus explicit/topic-pinned rules; not PostgreSQL/hybrid/vector retrieval. |
+| Backend structure | `config/`, `controller/`, `dto/`, `entity/`, `repository/`, `service/`, `service/impl/`, `exception/`, `util/` under `org.springboot.backend` | Completed foundation | Matches the requested layered package structure. |
+| Rule catalogue API | `GET /api/v1/rules`, `GET /api/v1/rules/{ruleNumber}` | Completed foundation | Returns imported rules and stored passages. |
+| Assistant API | `POST /api/v1/questions:answer` | Partially completed | Returns explicit answer statuses, citations, warnings and deterministic calculation metadata; grounded generated prose remains limited. |
+| Corpus loading | `RuleImportService`, `JsonlParser`, bundled classpath JSONL | Completed foundation | Idempotently imports all 106 top-level records into PostgreSQL at startup. Embedded inserted rules are not yet stored as independent passages. |
+| Retrieval | `RuleRetrievalService`, `RulePassageRepository` | Partially completed | Database-backed term/rule-reference matching works; ranked PostgreSQL FTS/hybrid/vector retrieval remains missing. |
 | Hindi/English query normalization | deterministic fallback plus optional internal AI intent client | Partially completed | Seed Hindi terms and numeric extraction work; broad bilingual coverage/evaluation is missing. |
-| AI separation | Top-level `ai-service/`; backend only has `AiIntentClient` HTTP adapter | Completed architecture boundary | Provider prompt/key/client no longer exist in `backend/`. Frontend never calls AI service directly. |
+| AI separation | Top-level Python `ai-service/`; Java `AiService` interface and `ClaudeAiService` internal HTTP adapter | Completed architecture boundary | Despite its historical name, the Java adapter has no provider prompt, key or direct Claude API call. |
 | AI service behavior | Python standard-library HTTP service, internal `POST /internal/v1/query-intents`, provider protocol and Anthropic adapter | Partially completed | Intent extraction only. No grounded answer-generation or embedding endpoint yet. |
-| Failure behavior | Backend falls back locally if AI service is disabled/unavailable/invalid | Completed foundation | Retrieval remains usable without an LLM. Final answer safe-status behavior remains missing. |
-| Numerical validation | Backend rejects AI-proposed measurements not present in the question; unit conversions exist | Partially completed | Legal fee/setback/FAR/duration/clearance calculators are missing; current utility uses `double`, not final `BigDecimal` legal calculations. |
-| Citations | Rule/chunk/page metadata exists in retrieval results | Partially completed | No claim-to-citation validator, exact excerpt contract, official PDF viewer or final answer mapping. |
-| PostgreSQL | No current datasource/JPA/Flyway configuration in the generated backend | Missing | The earlier exposed datasource configuration is no longer present, but the target database model/migrations are not implemented. |
-| Amendment handling | Version warning constants identify the unverified 28 August 2026 issue | Partially completed | No effective-dated provision schema, authoritative amendment source or activation workflow. |
-| Backend tests | 44 tests for retrieval, data loading, chunking and cleaning | Partially completed | Useful foundation; controller/integration/calculator/citation tests remain missing. |
+| Failure behavior | Backend falls back locally if AI service is disabled/unavailable/invalid | Completed foundation | Unsupported questions return `NOT_FOUND_IN_RULES` without citations. |
+| Numerical validation | AI-proposed numbers are rechecked; `CalculationService` uses `BigDecimal` for the Rule 56 front-open-space bands | Partially completed | Fee, FAR, rear/side setback, duration and clearance calculators remain missing. |
+| Citations | `CitationValidationService` verifies excerpts against stored passage text; PDF endpoint exists | Partially completed | Claim-level citation coverage and independent page/excerpt review remain incomplete. |
+| PostgreSQL | JPA entities/repositories, environment configuration and `V1__initial_schema.sql` | Completed foundation | Live migration/startup was not verified against an actual PostgreSQL instance in this audit. |
+| Amendment handling | `RuleAmendment` entity and `AmendmentService` effective-date lookup/warning | Partially completed | Repository/admin lifecycle, authoritative 2026 source and maker-checker activation remain missing. |
+| Backend tests | Six unit tests cover bundled corpus parsing, retrieval deduplication, citation validation, answer/calculation and not-found behavior | Partially completed | Controller and Flyway/PostgreSQL integration tests remain missing. |
 | AI-service tests | Python `unittest` coverage verifies the HTTP contract, token protection, Devanagari digits and removal of hallucinated measurements | Partially completed | Live-provider, timeout/rate-limit and malformed-output coverage remains incomplete. |
 | Frontend tests | ESLint config only | Missing | No component/accessibility/E2E suite. |
 | Operations | Separate ports/config and service READMEs | Partially completed | No Compose, CI, container images, observability or deployment network policy. |
@@ -38,8 +38,8 @@ The source-data and retrieval foundations are usable and tested. The complete cl
 ### Backend owns
 
 - Public browser-facing APIs and validation.
-- Rule corpus loading, cleaning, chunking and official page metadata.
-- Deterministic lexical retrieval and safe fallback parsing.
+- Rule corpus import, PostgreSQL persistence and official page metadata.
+- Database-backed retrieval and safe fallback parsing.
 - Unit verification, deterministic legal calculators and amendment/effective-date resolution.
 - Citation validation, answer status, auditing and PostgreSQL persistence.
 - Calling the AI service through a narrow internal interface.
@@ -77,7 +77,7 @@ Completed assets:
 
 Remaining data work:
 
-- PostgreSQL/Flyway source, corpus, provision, chunk and amendment schema.
+- Richer corpus version/provision relationships beyond the current initial rule/passage/source/amendment schema.
 - Reviewed structured rows for numeric tables.
 - Authoritative official text for the 28 August 2026 Rule 2(5)(c) amendment.
 - Reviewed Hindi aliases/excerpts; legacy-font extraction must not be treated as authoritative.
@@ -88,14 +88,14 @@ Remaining data work:
 ### Completed foundations
 
 - Clean separation of browser API/backend from LLM/provider service.
-- Rule-file ingestion, cleaning, embedded-rule discovery and chunking.
-- In-memory lexical retrieval with bilingual offline query cues.
+- Flyway schema plus idempotent import of the bundled 106-record corpus.
+- Database-backed rule/passage retrieval with bilingual offline query cues.
 - Optional AI intent analysis with deterministic fallback.
 - Unit and data-integrity regression tests for current foundations.
 
 ### Partially completed
 
-- Spring backend API and layered package structure.
+- Spring `/api/v1` backend and layered `org.springboot.backend` package structure.
 - Bilingual intent normalization and rule citations metadata.
 - AI internal service and shared-token protection.
 - Rule version/cutoff warning.
@@ -104,10 +104,9 @@ Remaining data work:
 ### Missing
 
 - Product frontend and typed v1 client.
-- PostgreSQL entities/migrations/ingestion/search.
-- Final `questions:answer` orchestration and explicit safe statuses.
-- Deterministic legal calculators.
-- Grounded answer generation and citation validation.
+- PostgreSQL integration tests and production-grade ranked search.
+- Broader deterministic legal calculators.
+- Grounded answer generation and claim-level citation coverage.
 - Effective-dated amendments and maker-checker activation.
 - Full security, observability, evaluation, CI and deployment setup.
 

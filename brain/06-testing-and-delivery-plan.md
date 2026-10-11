@@ -129,7 +129,7 @@ Any lower achieved metric must be disclosed; do not present a small sample as ge
 
 ## 4. Current test gap
 
-The backend currently has only `contextLoads()`. There are no product unit/integration tests and no frontend tests. Because the configured datasource is external, even the context test is not an isolated proof of application health. The target suite must not depend on the committed hosted database.
+The backend currently has six isolated unit tests for corpus parsing, retrieval, citations, deterministic calculation, answered responses and not-found behavior. It still lacks controller tests and Testcontainers PostgreSQL/Flyway integration tests. The frontend still has no product tests. Automated tests must never depend on a shared or hosted database.
 
 ## 5. Prioritized implementation sequence
 
