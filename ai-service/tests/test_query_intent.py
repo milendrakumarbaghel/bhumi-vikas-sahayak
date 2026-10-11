@@ -25,9 +25,12 @@ class FixedProvider:
             "topics": ["SETBACK", "UNKNOWN_TOPIC"],
             "plot_area": {"value": 200, "unit": "sqm"},
             "road_width": {"value": 9, "unit": "m"},
+            "plot_frontage": None,
             "building_height": {"value": 99, "unit": "m"},
             "built_up_area": None,
             "building_use": "unknown",
+            "electric_line_category": "unknown",
+            "building_form": "unknown",
             "rule_refs": [],
         })
 

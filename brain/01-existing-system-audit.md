@@ -1,115 +1,57 @@
 # Existing System Audit
 
-## Executive assessment
+Updated 11 October 2026 after the six backend/AI improvements. This distinguishes implemented backend behavior from deployment and legal-review acceptance.
 
-The repository now has three explicit runtime boundaries:
+## Runtime boundaries
 
-- `frontend/`: React 19 + TypeScript + Vite user interface (still the starter UI).
-- `backend/`: public Spring Boot API under `org.springboot.backend`, PostgreSQL/Flyway persistence, rule import/retrieval, citation validation and deterministic calculation services.
-- `ai-service/`: separate Python internal service containing LLM prompts, provider credentials and provider HTTP integration.
-
-The source-data, database schema, import, retrieval and assistant API foundations are usable and tested. The frontend, broader calculators, grounded generation, production amendment activation and operational hardening remain incomplete.
+- `frontend/`: React 19, TypeScript and Vite; still the starter screen.
+- `backend/`: Java 25 / Spring Boot 4 under `org.springboot.backend`, Spring Security, PostgreSQL/Flyway, retrieval, amendment administration and final answer validation.
+- `ai-service/`: Python-only standard-library service; intent, grounded wording, deterministic calculators and separate semantic verification.
 
 ## Current implementation status
 
-| Area | Evidence | Status | Assessment |
-|---|---|---:|---|
-| React frontend | `frontend/src/App.tsx`, Vite/TypeScript config | Partially completed | Toolchain exists; screen is still the Vite starter and does not call the API. |
-| Backend structure | `config/`, `controller/`, `dto/`, `entity/`, `repository/`, `service/`, `service/impl/`, `exception/`, `util/` under `org.springboot.backend` | Completed foundation | Matches the requested layered package structure. |
-| Rule catalogue API | `GET /api/v1/rules`, `GET /api/v1/rules/{ruleNumber}` | Completed foundation | Returns imported rules and stored passages. |
-| Assistant API | `POST /api/v1/questions:answer` | Partially completed | Returns explicit answer statuses, citations, warnings and deterministic calculation metadata; grounded generated prose remains limited. |
-| Corpus loading | `RuleImportService`, `JsonlParser`, bundled classpath JSONL | Completed foundation | Idempotently imports all 106 top-level records into PostgreSQL at startup. Embedded inserted rules are not yet stored as independent passages. |
-| Retrieval | `RuleRetrievalService`, `RulePassageRepository` | Partially completed | Database-backed term/rule-reference matching works; ranked PostgreSQL FTS/hybrid/vector retrieval remains missing. |
-| Hindi/English query normalization | deterministic fallback plus optional internal AI intent client | Partially completed | Seed Hindi terms and numeric extraction work; broad bilingual coverage/evaluation is missing. |
-| AI separation | Top-level Python `ai-service/`; Java `AiService` interface and `ClaudeAiService` internal HTTP adapter | Completed architecture boundary | Despite its historical name, the Java adapter has no provider prompt, key or direct Claude API call. |
-| AI service behavior | Python standard-library HTTP service, internal `POST /internal/v1/query-intents`, provider protocol and Anthropic adapter | Partially completed | Intent extraction only. No grounded answer-generation or embedding endpoint yet. |
-| Failure behavior | Backend falls back locally if AI service is disabled/unavailable/invalid | Completed foundation | Unsupported questions return `NOT_FOUND_IN_RULES` without citations. |
-| Numerical validation | AI-proposed numbers are rechecked; `CalculationService` uses `BigDecimal` for the Rule 56 front-open-space bands | Partially completed | Fee, FAR, rear/side setback, duration and clearance calculators remain missing. |
-| Citations | `CitationValidationService` verifies excerpts against stored passage text; PDF endpoint exists | Partially completed | Claim-level citation coverage and independent page/excerpt review remain incomplete. |
-| PostgreSQL | JPA entities/repositories, environment configuration and `V1__initial_schema.sql` | Completed foundation | Live migration/startup was not verified against an actual PostgreSQL instance in this audit. |
-| Amendment handling | `RuleAmendment` entity and `AmendmentService` effective-date lookup/warning | Partially completed | Repository/admin lifecycle, authoritative 2026 source and maker-checker activation remain missing. |
-| Backend tests | Six unit tests cover bundled corpus parsing, retrieval deduplication, citation validation, answer/calculation and not-found behavior | Partially completed | Controller and Flyway/PostgreSQL integration tests remain missing. |
-| AI-service tests | Python `unittest` coverage verifies the HTTP contract, token protection, Devanagari digits and removal of hallucinated measurements | Partially completed | Live-provider, timeout/rate-limit and malformed-output coverage remains incomplete. |
-| Frontend tests | ESLint config only | Missing | No component/accessibility/E2E suite. |
-| Operations | Separate ports/config and service READMEs | Partially completed | No Compose, CI, container images, observability or deployment network policy. |
+| Area | Status | Evidence / limits |
+|---|---|---|
+| Frontend | Partial | Toolchain exists; no authenticated clerk/chat or administrator workflow yet. |
+| API boundary | Implemented | Answer, rule, document, auth, administrator amendment/import and health APIs. |
+| Corpus import | Implemented | 106 records, numbered clause/table passages, idempotent rebuild of stale chunking. |
+| Retrieval | Implemented | PostgreSQL stored tsvector / GIN rank, rule/clause boosts, lexical fusion and Hindi synonym expansion. Embeddings are not implemented or required by this hybrid path. |
+| Hindi/English | Partial product readiness | Intent, digits, synonym expansion and language overrides work. Offline fallback labels English source extracts rather than inventing a Hindi translation. Full bilingual UX/evaluation remains. |
+| Grounded generation | Implemented with safe fallback | Python proposes prose; Java checks exact quotes, complete claim coverage, rule references and numbers. A separate evidence-only semantic call must entail every claim. |
+| Semantic entailment | Implemented, not certified | Independent verification context checks scope, negation, modality, exceptions, dates and units. Same configured provider/model; no formal proof or live-provider accuracy claim. |
+| Numerical calculations | Implemented current tables | Rule 42 all three Table 4 and five Table 5 rows, conjunctive site minima, conditional commercial FAR, storey/height distinction, deleted coverage and above-90-m caveats; existing fee/FAR/setback/clearance/validity/farm calculators retained. |
+| Source citations | Implemented validation | Exact stored excerpts and clause metadata; amendments use their notification URL/page/version. Independent legal reviewer must still check corpus/page fidelity. |
+| PostgreSQL | Verified locally | V1/V2 Flyway, schema validation, startup import and real full-text queries exercised on disposable PostgreSQL 16 containers. No shared hosted database used. |
+| Amendments | Implemented lifecycle | Draft provenance, different-admin review, activation, rejection, same-scope supersession, exclusive end dates, historical evidence and audit trail. Actual August 2026 source still absent. |
+| USER/ADMIN authentication | Implemented | BCrypt passwords, hashed random opaque tokens, expiry/logout/disable, account lockout and administrator-only import/amendment/user provisioning. No public registration/static import token. |
+| Backend tests | Implemented regression suite | Unit/controller/contract tests, all 17 actual official sample responses, PostgreSQL/search/auth/amendment tests. Official response tests deliberately exercise deterministic fallback with a real Python calculator, not a paid live provider. |
+| Python tests | Implemented regression suite | Internal HTTP contracts, fake provider, facts/units/calculators, all Rule 42 rows and independent verifier fail-closed tests. |
+| Operations | Partial | Health/readiness and platform setup exist. CI, load tests, MFA/SSO, recovery, monitoring, backup/restore and deployment policy remain. |
 
-## Service ownership
+## Ownership
 
-### Backend owns
+Java owns application authorization, legal source selection/effective dates, provenance, citations, final acceptance and audit. Python owns provider credentials/prompts, proposed language and deterministic table functions. Java does not accept generated calculations in place of trusted calculator output. If amended evidence is selected, old base-corpus calculations are withheld until revised table logic has been reviewed.
 
-- Public browser-facing APIs and validation.
-- Rule corpus import, PostgreSQL persistence and official page metadata.
-- Database-backed retrieval and safe fallback parsing.
-- Unit verification, deterministic legal calculators and amendment/effective-date resolution.
-- Citation validation, answer status, auditing and PostgreSQL persistence.
-- Calling the AI service through a narrow internal interface.
+The browser calls Java only. Authenticated PDF viewing requires a Bearer-authorized fetch/Blob or authenticated viewer; do not leak tokens into source URLs.
 
-### AI service owns
+## Security/configuration findings
 
-- LLM provider credentials and HTTP/SDK integrations.
-- Provider/model configuration, prompts and structured generation schemas.
-- Hindi/English translation and query-intent proposals.
-- Future embeddings/reranking and grounded-language generation, once implemented.
-- No final legal decision, table-row selection, calculation or citation authority.
+- `DB_PASSWORD` now has no embedded password fallback. A credential previously committed/shared must still be revoked/rotated at the provider; that external operation was not performed.
+- All DB connection variables must be explicitly set for local runs to avoid the configured hosted URL.
+- `BVS_BOOTSTRAP_ADMIN_USERNAME/PASSWORD` provision the first ADMIN; remove after setup. Existing passwords are not overwritten.
+- A second ADMIN is required for independent amendment review.
+- Browser APIs use application Bearer tokens; the internal `BVS_AI_SERVICE_TOKEN` is separate and must be non-empty in deployment.
+- Passwords are BCrypt hashed; opaque tokens are SHA-256 hashed in PostgreSQL. Tokens expire and can be revoked.
+- HTTPS, private AI networking, distributed abuse protection, recovery/MFA/SSO and operational security review remain deployment requirements.
 
-### Frontend owns
+## Source and legal limits
 
-- Clerk query/follow-up interaction and bilingual presentation.
-- Rendering only backend-validated answers, calculations, citations, warnings and safe statuses.
-- It must never receive provider credentials or directly call `ai-service/`.
+The supplied English/Hindi PDFs and 106-record corpus are consolidated through 6 March 2025. Rule 42 Tables 4/5 were checked against official English PDF printed pages 58-59.
 
-## Configuration and security findings
+The authoritative August 2026 Rule 2(5)(c) notification is not bundled. Do not invent its wording, checksum or exact effective date from secondary summaries. The warning remains until verified material is submitted, independently reviewed and activated. Submitted amendment provenance is recorded, not automatically authenticated against a government source.
 
-- The previous plaintext hosted PostgreSQL credential is absent from the current backend configuration. Because it was once committed/shared, it must still be rotated/revoked at the provider and repository history reviewed.
-- `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` now belong only to the AI-service process.
-- `BVS_AI_SERVICE_TOKEN` protects the internal endpoint when set. Production must require a non-empty token and network-level isolation; the blank-token behavior is local-development convenience only.
-- Backend logs intentionally omit user question text on AI-service failure.
-- The AI-service returns a generic provider-failure message rather than forwarding provider response details.
+Regression gold checks use the supplied rules and explicit expected statuses/facts, but are not department-signed legal certification. A live provider key was not configured, so no paid-model end-to-end quality evaluation was run.
 
-## Source data status
+## Still outside this change
 
-Completed assets:
-
-- 106 JSONL records: Rules 1-105 plus Rule 26-B.
-- English page-separated text and official English/Hindi PDFs.
-- Rule/title/part/page/text metadata.
-- Seventeen seed questions including Hindi and not-found cases.
-
-Remaining data work:
-
-- Richer corpus version/provision relationships beyond the current initial rule/passage/source/amendment schema.
-- Reviewed structured rows for numeric tables.
-- Authoritative official text for the 28 August 2026 Rule 2(5)(c) amendment.
-- Reviewed Hindi aliases/excerpts; legacy-font extraction must not be treated as authoritative.
-- Versioned ingestion, checksums, activation and rollback.
-
-## Completed, partial and missing summary
-
-### Completed foundations
-
-- Clean separation of browser API/backend from LLM/provider service.
-- Flyway schema plus idempotent import of the bundled 106-record corpus.
-- Database-backed rule/passage retrieval with bilingual offline query cues.
-- Optional AI intent analysis with deterministic fallback.
-- Unit and data-integrity regression tests for current foundations.
-
-### Partially completed
-
-- Spring `/api/v1` backend and layered `org.springboot.backend` package structure.
-- Bilingual intent normalization and rule citations metadata.
-- AI internal service and shared-token protection.
-- Rule version/cutoff warning.
-- Automated backend/AI-service testing.
-
-### Missing
-
-- Product frontend and typed v1 client.
-- PostgreSQL integration tests and production-grade ranked search.
-- Broader deterministic legal calculators.
-- Grounded answer generation and claim-level citation coverage.
-- Effective-dated amendments and maker-checker activation.
-- Full security, observability, evaluation, CI and deployment setup.
-
-## Inspection limits
-
-Status is based on repository code and local tests. No live database, external LLM provider or government system was contacted. The official August 2026 amendment text remains unverified and must not be activated from the secondary summary link.
+Product frontend, typed authenticated client, expert-signed larger bilingual dataset, actual amendment acquisition, observed live-model performance, deployment/monitoring and administrator UI. See [the completion handoff](07-backend-ai-completion.md) for implementation/API/test details.

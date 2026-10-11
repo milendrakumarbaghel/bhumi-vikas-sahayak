@@ -1,5 +1,7 @@
 # REST API Contract
 
+This file describes the broader target product contract; some fields/routes below remain proposed. The currently implemented request uses `question`, optional `language: "en"|"hi"` and optional `asOfDate`, not the proposed structured `facts` request below. All application routes now require a USER/ADMIN Bearer token except login and health. See [backend API/setup](../backend/README.md#login-and-use-the-api) and [the current completion record](07-backend-ai-completion.md) for the authoritative implemented auth/amendment routes and limits.
+
 Base path: `/api/v1`. JSON is UTF-8. Dates use ISO `YYYY-MM-DD`; timestamps use ISO-8601 with offset/UTC. Decimal legal measurements are JSON numbers plus explicit units. The server generates a request/answer ID if the client does not supply an idempotency key.
 
 ## 1. Ask a question

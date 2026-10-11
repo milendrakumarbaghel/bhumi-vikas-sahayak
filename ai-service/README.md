@@ -12,10 +12,14 @@ The service may:
 - Provide provider/model metadata to the backend.
 - Word a short answer (English or plain Hindi) from rule extracts the backend supplies,
   citing each statement as a chunk ID plus a verbatim quote. The backend verifies every
-  quote against the rule text before anything is shown.
+  quote against the rule text and requires complete claim coverage before generated prose is shown.
+- Independently evaluate each proposed claim against its cited evidence and deterministic result,
+  using a separate evidence-only model call. Contradiction, insufficient evidence, malformed
+  responses or provider failure never approve an answer.
 - Run the deterministic rule calculators in `ai_service/calculators/` (plain Python, no
   language model): front/rear open space (Rule 56), permission and application fees
-  (Rule 21), maximum built-up area from FAR (Rule 61) and farm-house limits (Rule 17).
+  (Rule 21), FAR (Rule 61), full Rule 42 Tables 4/5 planning norms, side setbacks,
+  electric-line clearance, validity and farm-house limits (Rule 17).
 
 The service must not:
 
@@ -29,7 +33,7 @@ The service must not:
 Every table value in `calculators/tables.py` was checked against the official English PDF
 (`track-1-bhumi-vikas-sahayak/resources/MP_Bhumi_Vikas_Rules_2012_upto_2025-03-06_EN.pdf`)
 and cites its page: Rule 56 tables p.77-78, Rule 21 fees p.35-37, Rule 2(38) high rise p.8,
-Rule 61 Table 8 p.83, Rule 17 p.34. Every result returns its inputs, matched band, formula,
+Rule 61 Table 8 p.83, Rule 17 p.34 and Rule 42 Tables 4/5 p.58-59. Every result returns its inputs, matched band, formula,
 assumptions and PDF page. Decisions where the printed rules are ambiguous:
 
 - **Fee bands** (Rule 21(3)(b)) are printed as whole numbers with gaps (0-75, 76-125, ...).
@@ -40,6 +44,12 @@ assumptions and PDF page. Decisions where the printed rules are ambiguous:
   at 50/60/75% coverage that is labelled "ILLUSTRATION ONLY, NOT FROM THE RULES".
 - When only the plot area is given, fees are shown for the maximum built-up area under FAR,
   stated as an assumption.
+- Rule 42 checks road width, plot area and plot frontage together in one row. Height over
+  30 m or more than ten storeys uses Table 5; proposed heights up to 30 m require storey
+  count to distinguish the applicable table. Without proposed height, the result is a site
+  capacity catalogue, not an approval. Table 4 deleted coverage stays null; Table 5 coverage
+  is 30%. The above-90-m row is not unlimited permission, and premium FAR needs its
+  stated approvals/TDR/development-plan conditions.
 
 The Java backend validates every response and falls back to deterministic parsing when this service is unavailable.
 
@@ -53,13 +63,14 @@ ai_service/
 ├── models.py               backend-compatible response model
 ├── calculators/
 │   ├── tables.py           rule table values, each citing its PDF page
-│   └── calculators.py      setback, fee, FAR and farm-house calculators
+│   └── calculators.py      setback, fee, FAR, height, clearance, validity and farm-house calculators
 ├── providers/
 │   ├── base.py             provider protocol and safe exception
 │   └── anthropic.py        Anthropic HTTP adapter
 └── services/
     ├── query_intent.py     prompt, schema and measurement validation
-    └── answer.py           grounded-answer prompt and schema
+    ├── answer.py           grounded-answer prompt, schema and sentence-level claim proposals
+    └── entailment.py       independent evidence-only semantic verifier
 tests/                      standard-library unit/API tests
 ```
 
@@ -125,14 +136,21 @@ cd ai-service
 py -3 -m unittest discover -s tests -v
 ```
 
-Tests use a fake provider and make no external API calls.
+Tests use a fake provider and make no external API calls. Rule 42 tests cover all eight
+official rows, conjunctive minima, high-rise storeys, unknown height and approval caveats.
+An independent verifier call uses the configured provider/model: it is stronger grounding,
+not formal proof, and its live accuracy still needs expert-reviewed evaluation.
 
 ## Internal endpoints
 
 - `GET /internal/v1/health`
 - `POST /internal/v1/query-intents`
-- `POST /internal/v1/answers` - `{question, language, chunks[], facts?, calculation?}` -> `{status, answer, citations[{chunkId, quote}], missingInputs[], calculations}`. If neither `calculation` nor `facts` is sent, the service derives facts from the question (query-intent analysis) and runs the calculators itself.
-- `POST /internal/v1/calculations` - `{topics[], plotArea?, roadWidth?, buildingHeight?, builtUpArea?, storeys?, buildingUse?, commercialCategory?, groundCoveragePercent?}` -> `{calculations[], missingInputs[], notApplicable[]}`. Measures are `{value, unit}` with area units `sqm|sqft|sqyd|ha` and length units `m|ft`. No language model is called, so this works without an API key.
+- `POST /internal/v1/answers` - `{question, language, chunks[], facts?, calculation?}` -> `{status, answer, citations[{chunkId, quote}], claims[{text, chunkIds}], missingInputs[], calculations}`. Claims must cover each answer sentence in order. If neither `calculation` nor `facts` is sent, the service derives facts from query intent and runs the calculators.
+- `POST /internal/v1/claims:verify` - `{question, claims[{id,text,evidence:["verified source quote"]}], calculation?}` -> `{verdicts[{id,verdict,reason}]}`. Verdicts are `entailed|contradicted|insufficient`; each ID must occur exactly once (sequential IDs start at zero). This route makes an independent provider call and never substitutes generation for verification.
+- `POST /internal/v1/calculations` - `{topics[], plotArea?, plotFrontage?, roadWidth?, buildingHeight?, builtUpArea?, storeys?, buildingUse?, buildingForm?, commercialCategory?, groundCoveragePercent?, electricLineCategory?}` -> `{calculations[], missingInputs[], notApplicable[]}`. Measures are `{value, unit}` with area units `sqm|sqft|sqyd|ha` and length units `m|ft`; electric categories are `low_medium|high_up_to_33000|extra_high_above_33000`. No language model is called, so this works without an API key.
+
+All POST routes require the matching internal token when configured. The health route remains
+public. Keep this process private; application USER/ADMIN authentication belongs to Java.
 
 Example health check:
 

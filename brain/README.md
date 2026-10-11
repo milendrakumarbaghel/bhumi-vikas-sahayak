@@ -19,6 +19,7 @@ The specification is tailored to the code and data presently in this repository:
 5. [AI, RAG and amendment requirements](05-ai-rag-and-amendments.md) - the separate AI-service boundary, grounding, Hindi/English handling, citations, refusal behavior and versioning.
 6. [Testing and delivery plan](06-testing-and-delivery-plan.md) - test pyramid, evaluation set, acceptance gates and prioritized implementation sequence.
 7. [Implementation prompt index](prompts/README.md) - separate, copy-ready prompts for each workstream and a recommended execution order.
+8. [Backend/AI completion handoff](07-backend-ai-completion.md) - the six implemented improvements, actual endpoints, verification results and external acceptance limits. This is the current implementation record; older specification sections can still describe future product work.
 
 ## Status vocabulary
 
@@ -26,7 +27,7 @@ The specification is tailored to the code and data presently in this repository:
 - **Partially completed**: a framework/dependency/configuration exists, but the user-facing capability is not implemented end to end.
 - **Missing**: no implementation was found in the scanned repository.
 
-Status is based on a static repository inspection on 11 October 2026. No live database or external AI provider was contacted, and generated build artifacts were not treated as feature implementation.
+Status was updated after local unit, HTTP-contract and disposable PostgreSQL integration tests on 11 October 2026. No shared hosted database or live AI provider was used. Generated build artifacts were not treated as feature implementation.
 
 ## Product boundary
 

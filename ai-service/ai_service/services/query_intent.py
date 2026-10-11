@@ -19,6 +19,10 @@ BUILDING_USES = (
     "residential", "commercial", "shop_cum_residence", "industrial", "public",
     "agricultural", "other", "unknown",
 )
+ELECTRIC_LINE_CATEGORIES = (
+    "low_medium", "high_up_to_33000", "extra_high_above_33000", "unknown",
+)
+BUILDING_FORMS = ("detached", "semi_detached", "row", "unknown")
 NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 SYSTEM_PROMPT = f"""
@@ -26,7 +30,8 @@ You prepare search input for a tool that answers questions only from the Madhya 
 Bhumi Vikas Rules, 2012. Do not answer the legal question and do not add facts.
 
 Return the user's language (en/hi), a faithful English translation, 5-15 English legal
-search terms, applicable topic codes, explicitly stated measurements, building use, and
+search terms, applicable topic codes, explicitly stated measurements, building use, building
+form (detached, semi-detached or row), electric line category, and
 explicitly named rule references. Copy measurement numbers and units exactly; use null
 when absent. Hindi, Devanagari and romanised Hindi may occur. "gaj" means sqyd.
 
@@ -71,6 +76,7 @@ class QueryIntentService:
             topics=tuple(item for item in _strings(proposed.get("topics")) if item in TOPICS),
             plot_area=_verified_measure(proposed.get("plot_area"), stated_numbers),
             road_width=_verified_measure(proposed.get("road_width"), stated_numbers),
+            plot_frontage=_verified_measure(proposed.get("plot_frontage"), stated_numbers),
             building_height=_verified_measure(proposed.get("building_height"), stated_numbers),
             built_up_area=_verified_measure(proposed.get("built_up_area"), stated_numbers),
             building_use=(
@@ -78,8 +84,20 @@ class QueryIntentService:
                 if proposed.get("building_use") in BUILDING_USES
                 else "unknown"
             ),
+            electric_line_category=(
+                proposed.get("electric_line_category")
+                if proposed.get("electric_line_category") in ELECTRIC_LINE_CATEGORIES
+                else "unknown"
+            ),
+            building_form=(
+                proposed.get("building_form")
+                if proposed.get("building_form") in BUILDING_FORMS else "unknown"
+            ),
             rule_refs=tuple(_strings(proposed.get("rule_refs"))),
             model=self._provider.model_name,
+            storeys=(proposed.get("storeys") if isinstance(proposed.get("storeys"),int)
+                     and not isinstance(proposed.get("storeys"),bool) and proposed.get("storeys") > 0
+                     and proposed.get("storeys") in stated_numbers else None),
         )
 
 
@@ -91,9 +109,13 @@ def response_schema() -> dict[str, Any]:
         "topics": {"type": "array", "items": {"type": "string", "enum": list(TOPICS)}},
         "plot_area": _nullable_measure(["sqm", "sqft", "sqyd"]),
         "road_width": _nullable_measure(["m", "ft"]),
+        "plot_frontage": _nullable_measure(["m", "ft"]),
         "building_height": _nullable_measure(["m", "ft"]),
         "built_up_area": _nullable_measure(["sqm", "sqft", "sqyd"]),
         "building_use": {"type": "string", "enum": list(BUILDING_USES)},
+        "electric_line_category": {"type": "string", "enum": list(ELECTRIC_LINE_CATEGORIES)},
+        "building_form": {"type": "string", "enum": list(BUILDING_FORMS)},
+        "storeys": {"anyOf": [{"type":"integer","minimum":1},{"type":"null"}]},
         "rule_refs": {"type": "array", "items": {"type": "string"}},
     }
     return {

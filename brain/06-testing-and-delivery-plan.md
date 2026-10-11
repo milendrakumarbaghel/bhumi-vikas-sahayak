@@ -94,7 +94,7 @@ Minimum cases:
 
 | Category | Cases |
 |---|---|
-| Rule 56 front/rear setbacks | road widths 9, just over 9, 12, just over 12, 18, just over 18; plot areas 40, just over 40, 150, just over 150, 225, just over 225; >12.5 m height routes to Rule 42. |
+| Rule 56 front/rear/side setbacks | Road-width and plot-area band boundaries; detached, semi-detached and row forms; 7/10/12 m frontage-height exceptions; >12.5 m height routes to Rule 42. |
 | Rule 21 fees | every residential band boundary; commercial +50%; high-rise per-area; addition/alteration; revalidation; missing built-up area/use/high-rise status. |
 | Rule 17 | exactly/under 0.40 ha, FAR calculation, road-width and height conditions; distinguish 17-a tourist facility. |
 | Rule 23 | grant date, expiry, before/after-expiry fee condition, first/second revalidation, work commenced. |
@@ -129,15 +129,19 @@ Any lower achieved metric must be disclosed; do not present a small sample as ge
 
 ## 4. Current test gap
 
-The backend currently has six isolated unit tests for corpus parsing, retrieval, citations, deterministic calculation, answered responses and not-found behavior. It still lacks controller tests and Testcontainers PostgreSQL/Flyway integration tests. The frontend still has no product tests. Automated tests must never depend on a shared or hosted database.
+The backend now evaluates actual assistant responses for all 17 supplied questions using the real corpus, production orchestration and a temporary Python calculator. Expected statuses, cited rules and mandatory legal facts are checked, including Hindi and both not-found cases. This replaces the former availability/inventory test. These regression expectations still need independent domain-review signoff and do not measure live-model accuracy.
+
+Unit, generated-claim coverage, separate entailment contract, passage chunking and controller tests also run. PostgreSQL/Flyway tests exercise real FTS/Hindi retrieval, role enforcement, token revocation/expiry, independent amendment review, rejection and historical supersession on disposable PostgreSQL 16. These passed with Docker during this implementation; they skip if Docker is unavailable, which must be disclosed rather than counted as acceptance. No shared/hosted database is used.
+
+Python tests verify all eight Rule 42 table rows, combined site minima, storey classification, missing-height/count safety, approval caveats and fail-closed semantic verdicts. The frontier gap is expert-reviewed live generation, broader Hindi/paraphrase/boundary coverage, deployment/load/security checks and frontend product tests—not sample inventory or absent SQL integration.
 
 ## 5. Prioritized implementation sequence
 
 ### Phase 0 - secure and stabilize foundation
 
-1. Rotate the exposed database password and externalize secrets.
+1. Rotate the exposed database password externally; source password fallback is now removed.
 2. Add explicit Spring profiles, safe security/CORS behavior and Actuator.
-3. Add Flyway; replace `ddl-auto=update` with controlled migration/validation.
+3. Keep Flyway migrations and `ddl-auto=validate` as mandatory deployment checks (implemented; retain in CI).
 4. Establish frontend/backend CI checks and Testcontainers.
 
 Exit: clean startup with local test PostgreSQL; no secrets in code; migrations/tests deterministic.
@@ -146,7 +150,7 @@ Exit: clean startup with local test PostgreSQL; no secrets in code; migrations/t
 
 1. Implement source/corpus/provision/chunk schema and JSONL importer.
 2. Normalize running headers, expose embedded rule identifiers and preserve raw text.
-3. Implement PostgreSQL lexical search, then embeddings/hybrid ranking.
+3. PostgreSQL full-text/lexical hybrid ranking and Hindi synonyms are implemented; add embeddings only if evaluation demonstrates a need.
 4. Implement source/rule endpoints and immutable citation excerpts.
 5. Add golden retrieval cases.
 
@@ -174,7 +178,7 @@ Exit: all demonstrated numeric answers come from reviewed code/table definitions
 ### Phase 4 - amendments and operations
 
 1. Obtain and verify the official August 2026 amendment.
-2. Implement effective-date/supersession workflow and maker-checker activation.
+2. Effective-date/supersession, rejection, independent review and activation are implemented; exercise them with the verified real notification.
 3. Add answer traces, feedback, metrics, dashboards and rollback runbook.
 4. Complete department review and pilot hardening.
 

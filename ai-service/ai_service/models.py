@@ -21,11 +21,15 @@ class QueryAnalysis:
     topics: tuple[str, ...]
     plot_area: Measure | None
     road_width: Measure | None
+    plot_frontage: Measure | None
     building_height: Measure | None
     built_up_area: Measure | None
     building_use: str
+    electric_line_category: str
+    building_form: str
     rule_refs: tuple[str, ...]
     model: str
+    storeys: int | None = None
 
     def to_contract(self) -> dict[str, Any]:
         """Return the camelCase contract already consumed by the Java backend."""
@@ -36,11 +40,15 @@ class QueryAnalysis:
             "topics": list(self.topics),
             "plotArea": _measure(self.plot_area),
             "roadWidth": _measure(self.road_width),
+            "plotFrontage": _measure(self.plot_frontage),
             "buildingHeight": _measure(self.building_height),
             "builtUpArea": _measure(self.built_up_area),
             "buildingUse": self.building_use,
+            "electricLineCategory": self.electric_line_category,
+            "buildingForm": self.building_form,
             "ruleRefs": list(self.rule_refs),
             "model": self.model,
+            "storeys": self.storeys,
         }
 
 
@@ -55,6 +63,12 @@ class CitationProposal:
 
 
 @dataclass(frozen=True)
+class ClaimProposal:
+    text: str
+    chunk_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AnswerProposal:
     """An unverified answer. The Java backend checks every quote before showing it."""
 
@@ -66,6 +80,7 @@ class AnswerProposal:
     model: str
     # Output of ai_service.calculators.run(), or None when no calculator applied.
     calculations: dict[str, Any] | None = None
+    claims: tuple[ClaimProposal, ...] = ()
 
     def to_contract(self) -> dict[str, Any]:
         return {
@@ -76,4 +91,5 @@ class AnswerProposal:
             "missingInputs": list(self.missing_inputs),
             "model": self.model,
             "calculations": self.calculations,
+            "claims": [{"text": c.text,"chunkIds": list(c.chunk_ids)} for c in self.claims],
         }

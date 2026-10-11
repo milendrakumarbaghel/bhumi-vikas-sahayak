@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 
 import org.springboot.backend.service.AiService;
 import org.springboot.backend.util.LanguageDetector;
+import org.springboot.backend.util.QueryLexicon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +39,9 @@ public class ClaudeAiService implements AiService {
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern HEIGHT = Pattern.compile(
             "(\\d+(?:\\.\\d+)?)\\s*(m|meters?|metres?|मीटर|ft|feet|फीट|फुट)\\s*(?:tall|high|ऊंच|ऊँच)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern FRONTAGE = Pattern.compile(
+            "(?:frontage|plot front|मुखभाग)\\s*(?:is|of|का)?\\s*(\\d+(?:\\.\\d+)?)\\s*(m|meters?|metres?|मीटर|ft|feet|फीट|फुट)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern AREA = Pattern.compile(
             "(\\d+(?:\\.\\d+)?)\\s*(sqm|sq\\.?\\s*m|square\\s*meters?|वर्ग\\s*मीटर|sqft|sq\\.?\\s*ft|gaj|गज)",
@@ -100,6 +104,7 @@ public class ClaudeAiService implements AiService {
     private Analysis fromResponse(String question, JsonNode node) {
         List<String> topics = strings(node.path("topics"));
         List<String> refs = strings(node.path("ruleRefs"));
+        refs = java.util.stream.Stream.concat(refs.stream(),QueryLexicon.ruleHints(question).stream()).distinct().toList();
         return new Analysis(
                 "hi".equals(node.path("language").asString()) ? "hi" : "en",
                 node.path("englishQuestion").asString(question),
@@ -107,11 +112,15 @@ public class ClaudeAiService implements AiService {
                 topics,
                 verifiedArea(question, node.path("plotArea")),
                 verifiedLength(question, node.path("roadWidth")),
+                verifiedLength(question, node.path("plotFrontage")),
                 verifiedLength(question, node.path("buildingHeight")),
                 verifiedArea(question, node.path("builtUpArea")),
                 nullable(node.path("buildingUse").asString("unknown")),
+                electricCategory(node.path("electricLineCategory").asString("unknown")),
+                buildingForm(node.path("buildingForm").asString("unknown")),
                 refs,
-                "ai-service");
+                "ai-service",
+                verifiedStoreys(question,node.path("storeys").asInt(0)));
     }
 
     private Analysis offline(String question) {
@@ -119,18 +128,26 @@ public class ClaudeAiService implements AiService {
         List<String> topics = new ArrayList<>();
         if (lower.matches("(?s).*(setback|open space|खाली जगह|सामने).*")) topics.add("SETBACK");
         if (lower.matches("(?s).*(fee|fees|फीस|शुल्क).*")) topics.add("FEES");
-        if (lower.matches("(?s).*(far|floor area|एफएआर).*")) topics.add("FAR");
+        if (question.matches("(?s).*\\bFAR\\b.*") || lower.matches("(?s).*(floor area|एफएआर).*")) topics.add("FAR");
         if (lower.matches("(?s).*(electric|voltage|बिजली).*")) topics.add("ELECTRIC_LINES");
         if (lower.matches("(?s).*(valid|renew|वैधता|नवीनीकरण).*")) topics.add("VALIDITY");
+        if (!lower.matches("(?s).*(lift|escalator|लिफ्ट).*") && QueryLexicon.expand(lower).matches("(?s).*(height|high.?rise|taller).*")) topics.add("HEIGHT");
+        if (lower.matches("(?s).*(farm.?house|फार्म).*")) topics.add("FARM_HOUSE");
+        if (QueryLexicon.expand(lower).matches("(?s).*(front open space|rear open space|side open space).*")) topics.add("SETBACK");
+        if (QueryLexicon.expand(lower).matches("(?s).*(permission fee).*")) topics.add("FEES");
         List<String> refs = new ArrayList<>();
         Matcher explicit = Pattern.compile("(?:rule|नियम)\\s*([0-9]+(?:\\([^)]*\\))?)", Pattern.CASE_INSENSITIVE)
                 .matcher(asciiDigits(question));
         while (explicit.find()) refs.add(explicit.group(1));
+        refs.addAll(QueryLexicon.ruleHints(question));
         return new Analysis(
-                languages.detect(question), question, question, List.copyOf(topics),
-                firstArea(question), firstLength(question, ROAD), firstLength(question, HEIGHT), null,
+                languages.detect(question), question, QueryLexicon.expand(question), topics.stream().distinct().toList(),
+                firstArea(question), firstLength(question, ROAD), firstLength(question, FRONTAGE),
+                firstLength(question, HEIGHT), null,
                 lower.matches("(?s).*(residential|house|home|आवासीय|मकान|घर).*") ? "residential" : null,
-                List.copyOf(refs), "offline");
+                offlineElectricCategory(lower),
+                offlineBuildingForm(lower),
+                refs.stream().distinct().toList(), "offline", offlineStoreys(question));
     }
 
     private static List<String> strings(JsonNode node) {
@@ -193,5 +210,41 @@ public class ClaudeAiService implements AiService {
 
     private static String nullable(String value) {
         return value == null || value.isBlank() || "unknown".equals(value) ? null : value;
+    }
+
+    private static String electricCategory(String value) {
+        return switch (value) {
+            case "low_medium", "high_up_to_33000", "extra_high_above_33000" -> value;
+            default -> "unknown";
+        };
+    }
+
+    private static String offlineElectricCategory(String question) {
+        if (question.matches("(?s).*(extra high|अति उच्च).*(33000|33).*")) return "extra_high_above_33000";
+        if (question.matches("(?s).*(high voltage|उच्च वोल्टेज|33000|33\\s*kv).*")) return "high_up_to_33000";
+        if (question.matches("(?s).*(low.?voltage|medium.?voltage|service line|लो वोल्टेज).*") ) return "low_medium";
+        return "unknown";
+    }
+
+    private static String buildingForm(String value) {
+        return switch (value) {
+            case "detached", "semi_detached", "row" -> value;
+            default -> "unknown";
+        };
+    }
+
+    private static String offlineBuildingForm(String question) {
+        if (question.matches("(?s).*(semi[- ]?detached|अर्ध.?स्वतंत्र).*") ) return "semi_detached";
+        if (question.matches("(?s).*(row house|row building|पंक्ति मकान).*") ) return "row";
+        if (question.matches("(?s).*(detached|स्वतंत्र मकान).*") ) return "detached";
+        return "unknown";
+    }
+
+    private static Integer verifiedStoreys(String question,int proposed) {
+        return proposed>0 && containsNumber(question,proposed) ? proposed:null;
+    }
+    private static Integer offlineStoreys(String question) {
+        Matcher m=Pattern.compile("(\\d+)\\s*(?:storeys?|stories|floors?|मंजिल)",Pattern.CASE_INSENSITIVE).matcher(asciiDigits(question));
+        return m.find()?verifiedStoreys(question,Integer.parseInt(m.group(1))):null;
     }
 }

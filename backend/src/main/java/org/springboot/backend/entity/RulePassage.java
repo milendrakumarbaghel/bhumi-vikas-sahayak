@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 @Entity
 @Table(name = "rule_passage")
@@ -33,6 +34,15 @@ public class RulePassage {
 
     @Column(nullable = false, columnDefinition = "text")
     private String text;
+
+    @Transient
+    private String sourceUrl;
+    @Transient
+    private String sourceVersion;
+
+    public void withSource(String url,String version) { this.sourceUrl=url;this.sourceVersion=version; }
+    public String getSourceUrl() { return sourceUrl; }
+    public String getSourceVersion() { return sourceVersion; }
 
     protected RulePassage() {
     }

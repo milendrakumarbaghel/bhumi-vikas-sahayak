@@ -12,6 +12,7 @@ from ai_service.providers.anthropic import AnthropicProvider
 from ai_service.providers.base import ProviderError
 from ai_service.services.answer import AnswerService
 from ai_service.services.query_intent import QueryIntentService
+from ai_service.services.entailment import EntailmentService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ def create_handler(
     service: QueryIntentService,
     internal_token: str,
     answer_service: AnswerService | None = None,
+    entailment_service: EntailmentService | None = None,
 ) -> Type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BhumiVikasAiService/0.1"
@@ -39,7 +41,8 @@ def create_handler(
         def do_POST(self) -> None:  # noqa: N802 - standard library callback name
             answers = self.path == "/internal/v1/answers" and answer_service is not None
             calculations = self.path == "/internal/v1/calculations"
-            if self.path != "/internal/v1/query-intents" and not answers and not calculations:
+            verifying = self.path == "/internal/v1/claims:verify" and entailment_service is not None
+            if self.path != "/internal/v1/query-intents" and not answers and not calculations and not verifying:
                 self._json(404, {"code": "NOT_FOUND", "message": "Endpoint not found"})
                 return
             if internal_token and not compare_digest(
@@ -48,6 +51,12 @@ def create_handler(
                 self._json(401, {"code": "UNAUTHORIZED", "message": "Invalid internal token"})
                 return
             try:
+                if verifying:
+                    body = self._request_json(MAX_ANSWER_BODY_BYTES)
+                    if not isinstance(body,dict):
+                        raise ValueError("request body must be an object")
+                    self._json(200,entailment_service.verify(body))
+                    return
                 if calculations:
                     # Plain code, no language model: works even without a provider key.
                     body = self._request_json()
@@ -118,7 +127,7 @@ def build_server(settings: Settings) -> ThreadingHTTPServer:
     service = QueryIntentService(provider)
     return ThreadingHTTPServer(
         (settings.host, settings.port),
-        create_handler(service, settings.internal_token, AnswerService(provider, service)),
+        create_handler(service, settings.internal_token, AnswerService(provider, service),EntailmentService(provider)),
     )
 
 

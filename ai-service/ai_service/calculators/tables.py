@@ -106,3 +106,25 @@ FARM_HOUSE_MIN_OPEN_SPACE_M = D("7.50")
 FARM_HOUSE_PAGE = 34
 
 SQM_PER_HECTARE = D("10000")
+
+# Rule 52, PDF page 69.
+ELECTRIC_CLEARANCE_PAGE = 69
+
+# Rule 23, PDF page 41.
+SANCTION_VALIDITY_PAGE = 41
+
+# Rule 42 Tables 4/5, PDF pp.58-59, consolidated through 6 March 2025.
+# road minimum, plot minimum, frontage minimum, FAR, maximum height,
+# front MOS, side/rear MOS, ground coverage. Table 4 column 6 was deleted.
+RULE42_TABLE4 = (
+    (D("12"), D("1000"), D("18"), D("1.50"), D("18"), D("7.5"), D("6"), None),
+    (D("18"), D("1500"), D("21"), D("1.75"), D("24"), D("9"), D("6"), None),
+    (D("24"), D("2000"), D("30"), D("2.00"), D("30"), D("12"), D("7.5"), None),
+)
+RULE42_TABLE5 = (
+    (D("30"), D("2500"), D("30"), D("2.25"), D("45"), D("15"), D("7.5"), D("30")),
+    (D("36"), D("3000"), D("40"), D("2.50"), D("60"), D("18"), D("9"), D("30")),
+    (D("45"), D("3500"), D("45"), D("2.75"), D("75"), D("21"), D("9"), D("30")),
+    (D("60"), D("4000"), D("50"), D("3.00"), D("90"), D("24"), D("10"), D("30")),
+    (D("75"), D("4500"), D("60"), D("3.00"), None, D("30"), D("12"), D("30")),
+)

@@ -6,7 +6,7 @@ import unicodedata
 from typing import Any
 
 from ai_service.calculators import calculators
-from ai_service.models import AnswerProposal, CitationProposal, Measure
+from ai_service.models import AnswerProposal, CitationProposal, ClaimProposal, Measure
 from ai_service.providers.base import ProviderError, StructuredLlmProvider
 from ai_service.services.query_intent import QueryIntentService
 
@@ -50,6 +50,11 @@ Rules you must follow:
 8. Language: write the answer in the language given as ANSWER_LANGUAGE. For "hi" use simple,
    plain Hindi in Devanagari that a citizen understands; keep rule numbers (e.g. "नियम 56"),
    numbers and units as digits, and keep quotes in the original English.
+9. Return claims: one entry for each sentence, in the answer's exact order. Concatenating
+   claim texts with spaces must reproduce the answer exactly. Each claim must list the
+   chunkIds whose cited quotes support that complete sentence, including every condition,
+   exception and legal modality (may/must/prohibited). Do not hide unsupported sentences.
+   Use an empty claims list only for not_found. Another independent verifier checks entailment.
 """.strip()
 
 
@@ -105,6 +110,11 @@ class AnswerService:
             ),
             model=self._provider.model_name,
             calculations=calculation,
+            claims=tuple(ClaimProposal(str(item.get("text","")),tuple(item.get("chunkIds",[])))
+                         for item in proposed.get("claims",[]) if isinstance(item,dict)
+                         and isinstance(item.get("text"),str)
+                         and isinstance(item.get("chunkIds"),list)
+                         and all(isinstance(value,str) for value in item["chunkIds"])),
         )
 
     def _calculate(self, request: dict[str, Any], question: str) -> dict[str, Any] | None:
@@ -124,9 +134,13 @@ class AnswerService:
             facts_body = {
                 "plotArea": _measure(analysis.plot_area),
                 "roadWidth": _measure(analysis.road_width),
+                "plotFrontage": _measure(analysis.plot_frontage),
                 "buildingHeight": _measure(analysis.building_height),
                 "builtUpArea": _measure(analysis.built_up_area),
                 "buildingUse": analysis.building_use,
+                "electricLineCategory": analysis.electric_line_category,
+                "buildingForm": analysis.building_form,
+                "storeys": analysis.storeys,
             }
             topics = list(analysis.topics)
         else:
@@ -158,6 +172,9 @@ def response_schema() -> dict[str, Any]:
             },
         },
         "missingInputs": {"type": "array", "items": {"type": "string"}},
+        "claims": {"type":"array","items":{"type":"object","properties":{
+            "text":{"type":"string"},"chunkIds":{"type":"array","items":{"type":"string"}}},
+            "required":["text","chunkIds"],"additionalProperties":False}},
     }
     return {
         "type": "object",

@@ -8,14 +8,17 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springboot.backend.dto.AskQuestionRequest;
 import org.springboot.backend.entity.BuildingRule;
 import org.springboot.backend.entity.RulePassage;
+import org.springboot.backend.integration.ai.GroundedAiClient;
 import org.springboot.backend.service.AiService;
 import org.springboot.backend.service.AmendmentService;
 import org.springboot.backend.service.CalculationService;
 import org.springboot.backend.service.CitationValidationService;
+import org.springboot.backend.service.GeneratedAnswerValidationService;
 import org.springboot.backend.service.RuleRetrievalService;
 import org.springboot.backend.service.impl.AssistantServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -27,6 +30,11 @@ class AssistantServiceTest {
         AiService ai = mock(AiService.class);
         RuleRetrievalService retrieval = mock(RuleRetrievalService.class);
         AmendmentService amendments = mock(AmendmentService.class);
+        when(amendments.resolve(any(),any(),any(),any())).thenAnswer(call -> call.getArgument(0));
+        GroundedAiClient groundedAi = mock(GroundedAiClient.class);
+        GeneratedAnswerValidationService generatedAnswers = mock(GeneratedAnswerValidationService.class);
+        when(groundedAi.calculate(any())).thenReturn(Optional.empty());
+        when(groundedAi.answer(any(), any(), any(), any())).thenReturn(Optional.empty());
         BuildingRule rule = new BuildingRule("56", "Residential Buildings", "Part V", 77, 80, "full text");
         RulePassage passage = new RulePassage(
                 "Rule 56(1)(a)", 77, 77,
@@ -34,13 +42,15 @@ class AssistantServiceTest {
         rule.addPassage(passage);
         AiService.Analysis analysis = new AiService.Analysis(
                 "en", "front open space", "front open space", List.of("SETBACK"),
-                null, 10.0, 9.0, null, "residential", List.of("56"), "offline");
+                null, 10.0, null, 9.0, null, "residential", "unknown", "unknown",
+                List.of("56"), "offline");
         when(ai.analyse(any())).thenReturn(analysis);
         when(retrieval.retrieve(any(), any())).thenReturn(List.of(passage));
         when(amendments.needsAugust2026Review(any(), any())).thenReturn(false);
 
         var service = new AssistantServiceImpl(
-                ai, retrieval, new CalculationService(), new CitationValidationService(), amendments);
+                ai, retrieval, new CalculationService(), new CitationValidationService(), amendments,
+                groundedAi, generatedAnswers);
         var response = service.answer(new AskQuestionRequest(
                 "My house faces a 10 m road and is 9 m high. What setback applies?",
                 "en", LocalDate.of(2026, 10, 11)));
@@ -63,13 +73,18 @@ class AssistantServiceTest {
         AiService ai = mock(AiService.class);
         RuleRetrievalService retrieval = mock(RuleRetrievalService.class);
         AmendmentService amendments = mock(AmendmentService.class);
+        when(amendments.resolve(any(),any(),any(),any())).thenAnswer(call -> call.getArgument(0));
+        GroundedAiClient groundedAi = mock(GroundedAiClient.class);
+        GeneratedAnswerValidationService generatedAnswers = mock(GeneratedAnswerValidationService.class);
+        when(groundedAi.calculate(any())).thenReturn(Optional.empty());
         when(ai.analyse(any())).thenReturn(new AiService.Analysis(
                 "en", "property tax", "property tax", List.of(),
-                null, null, null, null, null, List.of(), "offline"));
+                null, null, null, null, null, null, "unknown", "unknown", List.of(), "offline"));
         when(retrieval.retrieve(any(), any())).thenReturn(List.of());
 
         var service = new AssistantServiceImpl(
-                ai, retrieval, new CalculationService(), new CitationValidationService(), amendments);
+                ai, retrieval, new CalculationService(), new CitationValidationService(), amendments,
+                groundedAi, generatedAnswers);
         var response = service.answer(new AskQuestionRequest(
                 "How do I pay property tax online?", "hi", LocalDate.of(2026, 10, 11)));
 

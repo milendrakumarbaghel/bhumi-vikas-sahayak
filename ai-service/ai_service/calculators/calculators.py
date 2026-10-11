@@ -26,12 +26,15 @@ class Facts:
 
     plot_area_sqm: Decimal | None = None
     road_width_m: Decimal | None = None
+    plot_frontage_m: Decimal | None = None
     building_height_m: Decimal | None = None
     built_up_area_sqm: Decimal | None = None
     storeys: int | None = None
     building_use: str = "unknown"
     commercial_category: str | None = None
     ground_coverage_percent: Decimal | None = None
+    electric_line_category: str = "unknown"
+    building_form: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -182,8 +185,49 @@ def rear_open_space(facts: Facts) -> Calculation | Missing | NotApplicable:
     )
 
 
+def side_open_space(facts: Facts) -> Calculation | Missing | NotApplicable:
+    """Rule 56(3): side open spaces for low-rise residential buildings."""
+    assumptions, refusal = _low_rise_assumptions(facts)
+    if refusal:
+        return refusal
+    if facts.building_form == "unknown":
+        return Missing("building form (detached, semi-detached or row)")
+
+    if facts.building_form == "row":
+        value, sides, band = Decimal("0"), "both sides", "row building"
+    elif facts.building_form == "semi_detached":
+        value, sides, band = Decimal("3"), "one side", "semi-detached building"
+        if (facts.building_height_m is not None and facts.building_height_m <= Decimal("10")
+                and facts.plot_frontage_m is not None and facts.plot_frontage_m <= Decimal("10")):
+            value, band = Decimal("2.5"), "semi-detached; height up to 10 m and frontage up to 10 m"
+    elif facts.building_form == "detached":
+        value, sides, band = Decimal("3"), "both sides", "detached building"
+        if (facts.building_height_m is not None and facts.building_height_m <= Decimal("7")
+                and facts.plot_frontage_m is not None and facts.plot_frontage_m < Decimal("12")):
+            value, sides, band = Decimal("1.5"), "one side", "detached; height up to 7 m and frontage below 12 m"
+    else:
+        return NotApplicable("Unsupported building form for Rule 56(3).")
+
+    inputs = [{"name": "building form", "value": facts.building_form, "unit": ""}]
+    if facts.building_height_m is not None:
+        inputs.append(_measure("building height", facts.building_height_m, "m"))
+    if facts.plot_frontage_m is not None:
+        inputs.append(_measure("plot frontage", facts.plot_frontage_m, "m"))
+    return Calculation(
+        code="RESIDENTIAL_SIDE_OPEN_SPACE", rule="56(3)", pdf_page=t.REAR_OPEN_SPACE_PAGE,
+        inputs=inputs, matched_band=band,
+        formula="Rule 56(3): building form, height and plot frontage -> minimum side open space",
+        result={"name": "minimum side open space", "value": _num(value, "0.1"),
+                "unit": "m", "requiredOn": sides, "text": "Nil" if value == 0 else f"{_num(value)} m"},
+        assumptions=assumptions,
+    )
+
+
 def floor_area(facts: Facts) -> Calculation | Missing | NotApplicable:
     """Rule 61 Table 8: maximum total built-up area = plot area x FAR, plus an illustrative floor count."""
+    if (facts.building_height_m is not None and facts.building_height_m > t.LOW_RISE_HEIGHT_LIMIT_M
+            or facts.storeys is not None and facts.storeys > 10):
+        return rule42_planning(facts)
     if facts.plot_area_sqm is None:
         return Missing("plot area")
     use = facts.building_use
@@ -324,7 +368,10 @@ def _built_up_or_far(facts: Facts, assumptions: list[str]) -> Decimal | None:
     far_result = floor_area(facts)
     if not isinstance(far_result, Calculation):
         return None
-    built_up = Decimal(str(far_result.result["value"]))
+    amount=far_result.result.get("value",far_result.result.get("maximumBuiltUpSqm"))
+    if amount is None:
+        return None
+    built_up = Decimal(str(amount))
     assumptions.append(f"Built-up area not given: uses the maximum built-up area under FAR "
                        f"({_num(built_up)} sq m). The actual fee depends on the built-up area applied for.")
     return built_up
@@ -333,7 +380,11 @@ def _built_up_or_far(facts: Facts, assumptions: list[str]) -> Decimal | None:
 def farm_house(facts: Facts) -> Calculation | Missing | NotApplicable:
     """Rule 17: minimum plot, maximum FAR and built-up area for a farm house."""
     if facts.plot_area_sqm is None:
-        return Missing("plot area")
+        return Calculation(code="FARM_HOUSE_LIMITS",rule="17",pdf_page=t.FARM_HOUSE_PAGE,inputs=[],
+            formula="Rule 17(a)-(f): minimum plot and maximum FAR; no site-specific built-up area computed",
+            result={"minimumPlotHa":0.40,"maximumFar":0.10,"maxHeightM":7.5,"minRoadWidthM":7.5,
+                    "minOpenSpaceAllSidesM":7.5},
+            notes=["Agricultural land designation, sloping roof and at least 100 live trees per hectare are required."])
     hectares = facts.plot_area_sqm / t.SQM_PER_HECTARE
     eligible = hectares >= t.FARM_HOUSE_MIN_PLOT_HA
     max_built_up = facts.plot_area_sqm * t.FARM_HOUSE_MAX_FAR
@@ -352,13 +403,140 @@ def farm_house(facts: Facts) -> Calculation | Missing | NotApplicable:
     )
 
 
+def height_classification(facts: Facts) -> Calculation | Missing | NotApplicable:
+    """Rule 2(38): classifies a stated height/storey count; it does not invent a permitted height."""
+    if facts.building_height_m is None and facts.storeys is None:
+        return Missing("building height or number of storeys")
+    high_rise = _is_high_rise(facts)
+    inputs = []
+    if facts.building_height_m is not None:
+        inputs.append(_measure("building height", facts.building_height_m, "m"))
+    if facts.storeys is not None:
+        inputs.append({"name": "storeys", "value": facts.storeys, "unit": ""})
+    return Calculation(
+        code="HIGH_RISE_CLASSIFICATION", rule="2(38)", pdf_page=t.HIGH_RISE_DEFINITION_PAGE,
+        inputs=inputs,
+        matched_band="high rise" if high_rise else "not high rise under Rule 2(38)",
+        formula="high rise when height is above 30 m or the building has more than 10 storeys",
+        result={"name": "high rise", "value": bool(high_rise), "unit": ""},
+        notes=["This classifies the proposal; it does not determine the maximum permitted height."],
+    )
+
+
+def electric_line_clearance(facts: Facts) -> Calculation | Missing | NotApplicable:
+    """Rule 52 minimum building/balcony clearance from overhead electric lines."""
+    category = facts.electric_line_category
+    if category == "unknown":
+        return Missing("electric line voltage category")
+    if category == "low_medium":
+        result = {"verticalM": 2.5, "horizontalM": 1.2}
+        band = "low/medium voltage or service line"
+    elif category == "high_up_to_33000":
+        result = {"verticalM": 3.7, "horizontalM": 1.2}
+        band = "high voltage up to and including 33000 volts"
+    elif category == "extra_high_above_33000":
+        result = {"horizontalCorridorM": 15.0, "openEachSideOfCentreLineM": 7.5}
+        band = "extra high voltage above 33000 volts"
+    else:
+        return NotApplicable("Unsupported electric line category.")
+    return Calculation(
+        code="ELECTRIC_LINE_CLEARANCE", rule="52", pdf_page=t.ELECTRIC_CLEARANCE_PAGE,
+        inputs=[{"name": "electric line category", "value": category, "unit": ""}],
+        matched_band=band,
+        formula="Rule 52 table; use the applicable Electricity Rules value when it is greater",
+        result={"name": "minimum clearance", **result},
+        notes=["Measure vertical clearance from maximum sag and horizontal clearance from maximum wind deflection."],
+    )
+
+
+def sanction_validity(facts: Facts) -> Calculation | Missing | NotApplicable:
+    """Rule 23 duration and revalidation limits."""
+    return Calculation(
+        code="SANCTION_VALIDITY", rule="23", pdf_page=t.SANCTION_VALIDITY_PAGE,
+        inputs=[], matched_band="development permission under Section 30",
+        formula="3 years + up to two consecutive revalidation terms of 1 year each",
+        result={"initialYears": 3, "renewalTerms": 2, "yearsPerRenewal": 1, "maximumYears": 5},
+        notes=["If execution begins during validity, Rule 23(3) says the permission does not lapse thereafter."],
+    )
+
+
 # Which calculators each topic brings in (topic codes match the query-intent service).
+def rule42_planning(facts: Facts) -> Calculation | Missing | NotApplicable:
+    """Evaluate every Table 4/5 row; all three site minima must hold together."""
+    high_rise = (facts.building_height_m is not None and facts.building_height_m > Decimal("30")
+                 or facts.storeys is not None and facts.storeys > 10)
+    if facts.building_height_m is not None and facts.building_height_m <= t.LOW_RISE_HEIGHT_LIMIT_M and not high_rise:
+        return NotApplicable("Rule 42 tables apply above 12.5 m or to high rise buildings under Rule 2(38).")
+    if facts.building_height_m is not None and not high_rise and facts.storeys is None:
+        return Missing("storey count (more than 10 storeys uses Rule 42 Table 5 even at 30 m or below)")
+    for label, field_value in (("road width", facts.road_width_m),
+                               ("plot area", facts.plot_area_sqm),
+                               ("plot frontage", facts.plot_frontage_m)):
+        if field_value is None:
+            return Missing(label)
+    table = 5 if high_rise else 4 if facts.building_height_m is not None else "4/5"
+    specs = ([(4,i,row) for i,row in enumerate(t.RULE42_TABLE4,1)] if table in (4,"4/5") else [])
+    specs += ([(5,i,row) for i,row in enumerate(t.RULE42_TABLE5,1)] if table in (5,"4/5") else [])
+    evaluated = []
+    for row_table,index,(road, area, frontage, far, height, front, sides, coverage) in specs:
+        site_eligible = (facts.road_width_m >= road and facts.plot_area_sqm >= area
+                         and facts.plot_frontage_m >= frontage)
+        height_eligible = (None if facts.building_height_m is None else
+                          facts.building_height_m > Decimal("90") if height is None else facts.building_height_m <= height)
+        evaluated.append({
+            "table":row_table,"row": index, "minimumRoadM": _num(road), "minimumPlotSqm": _num(area),
+            "minimumFrontageM": _num(frontage), "far": _num(far),
+            "heightUpToM": None if height is None else _num(height),
+            "heightBand": "above 90 m; no numerical upper limit in this row" if height is None else f"up to {height} m",
+            "frontMosM": _num(front), "sideRearMosM": _num(sides),
+            "groundCoveragePercent": None if coverage is None else _num(coverage),
+            "siteEligible": site_eligible, "proposedHeightEligible": height_eligible,
+            "eligible": site_eligible and height_eligible is not False,
+        })
+    eligible = [row for row in evaluated if row["eligible"]]
+    # Prefer the least restrictive height row containing the proposal. Do not combine columns across rows.
+    selected = eligible[0] if eligible and facts.building_height_m is not None else None
+    site_rows = [row for row in evaluated if row["siteEligible"]]
+    maximum = site_rows[-1]["heightUpToM"] if site_rows else None
+    result = {
+        "table": table, "rows": evaluated, "eligibleRows":eligible,
+        "compliantWithTable": bool(eligible) if facts.building_height_m is not None else None,
+        "selectedRow": selected, "maximumTableHeightM": maximum,
+        "above90mBandAvailable": table in (5,"4/5") and bool(site_rows) and site_rows[-1]["row"] == 5,
+        "conditionalCommercialFar": ([
+            {"rows": [4, 5], "maximumFar": 5, "conditions": "Commercial use in planning areas; authority approval; TDR and Premium FAR"},
+            {"rows": [5], "maximumFar": 7, "conditions": "Commercial use in Development Plan CBD/TOD corridor; authority approval; TDR and Premium FAR"},
+        ] if table in (5,"4/5") else []),
+    }
+    if selected:
+        result["maximumBuiltUpSqm"] = _num(facts.plot_area_sqm * Decimal(str(selected["far"])))
+    return Calculation(
+        code="RULE42_PLANNING_NORMS", rule="42" if table=="4/5" else f"42({2 if high_rise else 1})", pdf_page=59 if high_rise else 58,
+        inputs=[_measure("road width", facts.road_width_m, "m"),
+                _measure("plot area", facts.plot_area_sqm, "sq m"),
+                _measure("plot frontage", facts.plot_frontage_m, "m")]
+                + ([_measure("building height",facts.building_height_m,"m")] if facts.building_height_m is not None else []),
+        matched_band=f"Table {table}",
+        formula="A single row must satisfy road >= minimum, plot >= minimum, frontage >= minimum and proposed height band; plot area x row FAR",
+        result=result,
+        notes=["Table 4 ground coverage column and note were deleted on 6 March 2025; do not infer a coverage cap.",
+               "Table 5 row 5 means above 90 m; absence of a numerical cap is not unlimited permission.",
+               "Rule 42(3)-(6): NBC Part IV fire measures, high-rise site clearance/planning/building permissions, motorable unobstructed fire access and entrance/overhead clearance at least 4.5 m.",
+               "Development Plan and competent authority conditions still apply; premium FAR is never automatically granted."],
+    )
+
+
 TOPIC_CALCULATORS = {
-    "SETBACK": (front_open_space, rear_open_space),
+    "SETBACK": (front_open_space, rear_open_space, side_open_space),
+    "SETBACK_FRONT": (front_open_space,),
+    "SETBACK_REAR": (rear_open_space,),
+    "SETBACK_SIDE": (side_open_space,),
     "FAR": (floor_area,),
-    "HEIGHT": (floor_area,),
+    "HEIGHT": (height_classification, rule42_planning),
     "FEES": (building_permission_fee, application_fee),
     "FARM_HOUSE": (farm_house,),
+    "ELECTRIC_LINES": (electric_line_clearance,),
+    "VALIDITY": (sanction_validity,),
 }
 
 
@@ -371,6 +549,12 @@ def run(facts: Facts, topics: list[str]) -> dict[str, Any]:
                 chosen.append(calculator)
     if "FARM_HOUSE" in topics and floor_area in chosen:
         chosen.remove(floor_area)  # Rule 17 FAR applies, not Table 8
+    if (facts.building_height_m is not None and facts.building_height_m > t.LOW_RISE_HEIGHT_LIMIT_M
+            or facts.storeys is not None and facts.storeys > 10):
+        if any(topic.startswith("SETBACK") for topic in topics) or "FAR" in topics:
+            chosen = [fn for fn in chosen if fn not in (front_open_space, rear_open_space, side_open_space, floor_area)]
+            if rule42_planning not in chosen:
+                chosen.append(rule42_planning)
 
     calculations, missing, not_applicable = [], [], []
     for calculator in chosen:
@@ -390,6 +574,8 @@ AREA_UNITS = ("sqm", "sqft", "sqyd", "ha")
 LENGTH_UNITS = ("m", "ft")
 BUILDING_USES = ("residential", "commercial", "shop_cum_residence", "industrial", "public",
                  "agricultural", "other", "unknown")
+ELECTRIC_LINE_CATEGORIES = ("low_medium", "high_up_to_33000", "extra_high_above_33000", "unknown")
+BUILDING_FORMS = ("detached", "semi_detached", "row", "unknown")
 
 
 def facts_from_contract(body: dict[str, Any]) -> Facts:
@@ -406,15 +592,24 @@ def facts_from_contract(body: dict[str, Any]) -> Facts:
     coverage = _positive(body.get("groundCoveragePercent"), "groundCoveragePercent")
     if coverage is not None and coverage > 100:
         raise ValueError("groundCoveragePercent must be at most 100")
+    electric_category = body.get("electricLineCategory") or "unknown"
+    if electric_category not in ELECTRIC_LINE_CATEGORIES:
+        raise ValueError("electricLineCategory is invalid")
+    building_form = body.get("buildingForm") or "unknown"
+    if building_form not in BUILDING_FORMS:
+        raise ValueError("buildingForm is invalid")
     return Facts(
         plot_area_sqm=_area(body.get("plotArea"), "plotArea"),
         road_width_m=_length(body.get("roadWidth"), "roadWidth"),
+        plot_frontage_m=_length(body.get("plotFrontage"), "plotFrontage"),
         building_height_m=_length(body.get("buildingHeight"), "buildingHeight"),
         built_up_area_sqm=_area(body.get("builtUpArea"), "builtUpArea"),
         storeys=storeys,
         building_use=use,
         commercial_category=category,
         ground_coverage_percent=coverage,
+        electric_line_category=electric_category,
+        building_form=building_form,
     )
 
 

@@ -59,6 +59,11 @@ public class BuildingRule {
         passages.add(passage);
     }
 
+    public void replacePassages(List<RulePassage> replacements) {
+        passages.clear();
+        replacements.forEach(this::addPassage);
+    }
+
     public Long getId() { return id; }
     public String getRuleNumber() { return ruleNumber; }
     public String getTitle() { return title; }

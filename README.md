@@ -13,19 +13,22 @@ Implemented foundations:
 - Loading and cleaning all 106 supplied rule records.
 - Detection of inserted rules such as 12-A, 17-a and 26-A.
 - PostgreSQL-backed rule and passage persistence with Flyway migrations.
-- Database-backed rule passage retrieval.
-- Basic English/Hindi query normalization and measurement extraction.
+- PostgreSQL full-text/lexical hybrid ranking, precise rule/clause priority and Hindi synonym expansion.
+- English/Hindi query normalization and measurement extraction.
 - Optional Python AI service for bilingual intent extraction.
 - Automatic deterministic fallback when the AI service is disabled or unavailable.
-- Rule catalogue, document, import and cited assistant APIs under `/api/v1`.
-- A deterministic Rule 56 front-open-space calculation path.
+- Authenticated rule, document and cited assistant APIs; USER/ADMIN accounts and administrator-only import.
+- Deterministic setback, fee, FAR, complete Rule 42 height/high-rise tables, electric-clearance, sanction-duration and farm-house calculations.
+- Sentence-level claim/citation checks plus a separate evidence-only entailment pass; unverifiable prose fails closed.
+- Effective-dated amendment drafts, independent administrator review, activation, rejection, historical resolution and audited supersession.
+- Actual answer regression checks for all 17 official sample questions and isolated PostgreSQL integration tests.
 
 Still under development:
 
 - Clerk-focused frontend (the current frontend is still the Vite starter screen).
-- Broader citation validation and grounded answer generation.
-- Remaining fee, FAR, setback and other legal calculators beyond the current Rule 56 case.
-- Effective-dated amendment activation and administration.
+- Live-provider evaluation, domain-expert legal review and production hardening. Semantic checks reduce risk, but cannot mathematically prove every paraphrase.
+- Additional specialist calculators and human review of every activated rule table.
+- Ingestion/review of the authoritative August 2026 notification (not included in the supplied consolidated corpus).
 
 Detailed requirements and implementation prompts are in [`brain/`](brain/README.md).
 
@@ -39,17 +42,17 @@ React + TypeScript frontend (:5173)
   │ public HTTP
   ▼
 Java Spring Boot backend (:8080)
-  ├─ public APIs
-  ├─ PostgreSQL/Flyway rule corpus and passage retrieval
+  ├─ authenticated APIs and administrator lifecycle
+  ├─ PostgreSQL/Flyway corpus, full-text search and effective-dated amendments
   ├─ deterministic validation, citation and calculation services
   └─ optional internal HTTP call
              │
              ▼
 Python AI service (:8081)
-  └─ provider prompts, credentials and intent extraction
+  └─ provider prompts, intent, grounded wording, claim verification and calculators
 ```
 
-The frontend calls only the Java backend. The Python AI service is internal and never decides applicable law, calculates official values or creates authoritative citations.
+The frontend calls only the Java backend. The Python service is internal: it proposes grounded wording and runs deterministic calculators. Java checks claims, citations, named rules and numerical values and requires a separate semantic verification response before returning generated prose.
 
 ## Repository layout
 
@@ -74,7 +77,8 @@ Component guides:
 - Java Development Kit 25.
 - Python 3.11 or newer.
 - PostgreSQL 15 or newer with a database/user matching the backend configuration.
-- An Anthropic API key and supported model ID only if you want AI-assisted intent extraction.
+- An Anthropic API key and supported model ID for AI-assisted intent, generated prose and semantic verification; deterministic Python calculators need no provider key.
+- Docker for PostgreSQL integration tests and Python for the backend official-answer tests.
 
 Maven does not need to be installed globally; the repository includes Maven Wrapper scripts.
 
@@ -90,6 +94,11 @@ Terminal 1 - backend:
 
 ```bash
 cd backend
+export DB_URL="jdbc:postgresql://localhost:5432/bhumi_vikas"
+export DB_USERNAME="bhumi_vikas"
+export DB_PASSWORD="bhumi_vikas"
+export BVS_BOOTSTRAP_ADMIN_USERNAME="local-admin"
+export BVS_BOOTSTRAP_ADMIN_PASSWORD="replace-with-a-unique-long-password"
 BVS_AI_ENABLED=false ./mvnw spring-boot:run
 ```
 
@@ -101,7 +110,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Verify the backend at `http://localhost:8080/api/v1/rules/56`.
+Open `http://localhost:5173` (currently a starter UI). Verify liveness at `http://localhost:8080/api/v1/health/live`, then [log in and call authenticated APIs](backend/README.md#login-and-use-the-api). Python calculators require the separate Python process and `BVS_AI_ENABLED=true`.
 
 ### Windows PowerShell
 
@@ -109,6 +118,11 @@ Terminal 1 - backend:
 
 ```powershell
 Set-Location backend
+$env:DB_URL = "jdbc:postgresql://localhost:5432/bhumi_vikas"
+$env:DB_USERNAME = "bhumi_vikas"
+$env:DB_PASSWORD = "bhumi_vikas"
+$env:BVS_BOOTSTRAP_ADMIN_USERNAME = "local-admin"
+$env:BVS_BOOTSTRAP_ADMIN_PASSWORD = "replace-with-a-unique-long-password"
 $env:BVS_AI_ENABLED = "false"
 .\mvnw.cmd spring-boot:run
 ```
@@ -121,11 +135,11 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Verify the backend at `http://localhost:8080/api/v1/rules/56`.
+Open `http://localhost:5173`. Verify `/api/v1/health/live`, then follow the [PowerShell login example](backend/README.md#login-and-use-the-api). The starter frontend does not yet implement login/chat.
 
 ## Run the complete three-service setup
 
-Use the same non-empty internal token for the backend and AI service. Never commit the token or provider key.
+Use the same non-empty internal token for the backend and AI service. Configure the DB and bootstrap ADMIN variables from the quick start in the backend terminal too. Never commit passwords, tokens or provider keys. Remove bootstrap variables after first provisioning.
 
 ### macOS or Linux
 
@@ -195,14 +209,14 @@ macOS/Linux:
 
 ```bash
 curl http://localhost:8081/internal/v1/health
-curl http://localhost:8080/api/v1/rules/56
+curl http://localhost:8080/api/v1/health/ready
 ```
 
 Windows PowerShell:
 
 ```powershell
 Invoke-RestMethod http://localhost:8081/internal/v1/health
-Invoke-RestMethod http://localhost:8080/api/v1/rules/56
+Invoke-RestMethod http://localhost:8080/api/v1/health/ready
 ```
 
 ## Run tests and checks
@@ -234,9 +248,11 @@ Set-Location frontend; npm install; npm run lint; npm run build; Set-Location ..
 | `BVS_PDF_FILE` | Backend | supplied English PDF | Official source PDF path. |
 | `BVS_CORS_ORIGINS` | Backend | `http://localhost:5173` | Allowed frontend origin(s). |
 | `BVS_AI_ENABLED` | Backend | `true` | Enables the optional internal AI call. |
-| `APP_AI_SERVICE_URL` | Backend | `http://localhost:8000` | Default Python AI-service base URL. |
+| `APP_AI_SERVICE_URL` | Backend | `http://localhost:8081` | Default Python AI-service base URL. |
 | `BVS_AI_SERVICE_URL` | Backend | value of `APP_AI_SERVICE_URL` | Optional backend-specific override. |
 | `BVS_AI_SERVICE_TOKEN` | Both services | empty | Shared internal authentication token. Required outside local development. |
+| `BVS_BOOTSTRAP_ADMIN_USERNAME/PASSWORD` | Backend | empty | Provision the first administrator; remove after initial setup. |
+| `BVS_AUTH_TOKEN_TTL` | Backend | `8h` | Application Bearer-token lifetime (maximum 24h). |
 | `AI_SERVICE_HOST` | AI service | `127.0.0.1` | Bind address. |
 | `AI_SERVICE_PORT` | AI service | `8081` | Internal service port. |
 | `ANTHROPIC_API_KEY` | AI service | empty | Provider credential. Never expose to frontend/backend source. |
@@ -246,11 +262,14 @@ Set-Location frontend; npm install; npm run lint; npm run build; Set-Location ..
 
 The supplied machine-readable corpus contains Rules 1-105 plus Rule 26-B from the MP Bhumi Vikas Rules, 2012, consolidated through 6 March 2025. The official English PDF is the source of truth. The Hindi PDF is included for visual reference, but its legacy font is not safe for automatic text extraction.
 
-Repository material also identifies a later amendment dated 28 August 2026 affecting Rule 2(5)(c). Its authoritative official text is not included in the supplied corpus, so the application must warn rather than silently treat the March 2025 text as current for affected questions.
+Repository material identifies a later August 2026 amendment affecting Rule 2(5)(c); the current safety warning starts on 27 August 2026. Its authoritative text and exact legal effective date require verification. Until supplied, independently reviewed and activated, affected questions return review status rather than treating the March 2025 text as current. The implemented lifecycle supports effective dates and supersession once verified material is available.
+
+Local verification on 11 October 2026: 34 Java tests and 40 Python tests passed, including all 17 official sample-response cases and five real PostgreSQL integration tests, with no skips. No live-provider accuracy or expert legal certification is claimed. See [the implementation handoff](brain/07-backend-ai-completion.md).
 
 ## Security and privacy
 
 - Do not commit API keys, internal tokens or database credentials.
+- Rotate any database password previously shared/committed; removing the password fallback does not revoke that credential.
 - Do not expose the Python internal service directly to browsers or the internet.
 - Do not enter personal, property-owner or application-identifying data.
 - Treat AI output as untrusted until the Java backend validates it against official source text.

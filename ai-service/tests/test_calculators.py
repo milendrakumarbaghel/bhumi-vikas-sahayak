@@ -36,6 +36,15 @@ class OpenSpaceTest(unittest.TestCase):
                 self.assertEqual(expected, value(c.rear_open_space(c.Facts(plot_area_sqm=D(area)))))
         self.assertEqual("Nil", c.rear_open_space(c.Facts(plot_area_sqm=D(30))).result["text"])
 
+    def test_side_open_space_uses_form_height_and_frontage(self) -> None:
+        result = c.side_open_space(c.Facts(
+            building_use="residential", building_form="detached",
+            building_height_m=D("7"), plot_frontage_m=D("11"),
+        ))
+        self.assertIsInstance(result, c.Calculation)
+        self.assertEqual(1.5, result.result["value"])
+        self.assertEqual("one side", result.result["requiredOn"])
+
     def test_states_assumptions_and_refuses_tall_or_non_residential(self) -> None:
         calc = c.front_open_space(c.Facts(road_width_m=D(10)))
         self.assertIn("Assumes the building is up to 12.5 m high.", calc.assumptions)
@@ -141,6 +150,15 @@ class RunAndContractTest(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 c.facts_from_contract(body)
 
+    def test_height_electric_clearance_and_validity(self) -> None:
+        height = c.run(c.Facts(building_height_m=D("31")), ["HEIGHT"])
+        self.assertTrue(height["calculations"][0]["result"]["value"])
+        clearance = c.run(c.Facts(electric_line_category="low_medium"), ["ELECTRIC_LINES"])
+        self.assertEqual(2.5, clearance["calculations"][0]["result"]["verticalM"])
+        self.assertEqual(1.2, clearance["calculations"][0]["result"]["horizontalM"])
+        validity = c.run(c.Facts(), ["VALIDITY"])
+        self.assertEqual(5, validity["calculations"][0]["result"]["maximumYears"])
+
 
 class EndpointAndAnswerTest(unittest.TestCase):
     def test_calculations_endpoint_needs_no_provider(self) -> None:
@@ -154,7 +172,10 @@ class EndpointAndAnswerTest(unittest.TestCase):
             with request.urlopen(req) as response:
                 payload = json.load(response)
             self.assertEqual(3.6, payload["calculations"][0]["result"]["value"])
-            self.assertEqual(["plot area"], payload["missingInputs"])
+            self.assertEqual(
+                ["plot area", "building form (detached, semi-detached or row)"],
+                payload["missingInputs"],
+            )
         finally:
             server.shutdown()
             server.server_close()

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -19,7 +20,8 @@ public class RuleController {
     private final RuleRetrievalService retrieval;
     private final RuleImportService importer;
 
-    public RuleController(RuleRetrievalService retrieval, RuleImportService importer) {
+    public RuleController(
+            RuleRetrievalService retrieval, RuleImportService importer) {
         this.retrieval = retrieval;
         this.importer = importer;
     }
@@ -35,6 +37,7 @@ public class RuleController {
     }
 
     @PostMapping("/imports:run")
+    @PreAuthorize("hasRole('ADMIN')")
     public RuleImportService.ImportResult importRules() {
         return importer.importIfEmpty();
     }

@@ -11,6 +11,7 @@ import org.springboot.backend.entity.BuildingRule;
 import org.springboot.backend.exception.RuleNotFoundException;
 import org.springboot.backend.repository.BuildingRuleRepository;
 import org.springboot.backend.repository.RulePassageRepository;
+import org.springboot.backend.util.QueryLexicon;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,15 +44,34 @@ public class RuleRetrievalService {
 
     @Transactional(readOnly = true)
     public List<RulePassage> retrieve(String searchText, List<String> ruleReferences) {
+        if (QueryLexicon.outsideCorpus(searchText)) return List.of();
         Map<String, ScoredPassage> candidates = new LinkedHashMap<>();
-        for (String reference : ruleReferences == null ? List.<String>of() : ruleReferences) {
-            addMatches(candidates, reference, 100);
+        List<String> tokens = QueryLexicon.terms(searchText);
+        String fullTextQuery = String.join(" OR ",tokens.stream().filter(t -> t.matches("[a-z]+") ).toList());
+        if (!fullTextQuery.isBlank()) {
+            List<Long> ids = passages.rankedSearch(fullTextQuery);
+            if (!ids.isEmpty()) for (RulePassage passage : passages.fetchRanked(ids)) {
+                int rank = ids.indexOf(passage.getId());
+                merge(candidates,passage,80-rank);
+            }
         }
-        for (String term : terms(searchText)) {
+        int referenceScore=5000;
+        for (String reference : ruleReferences == null ? List.<String>of() : ruleReferences) {
+            String base = reference.split("\\(",2)[0];
+            for (RulePassage passage : passages.forRule(base)) {
+                String label=passage.getLabel().replaceAll("(?i)rule|\\s","");
+                String wanted=reference.replaceAll("\\s","");
+                boolean precise = wanted.contains("(") && (label.startsWith(wanted) || wanted.startsWith(label+"("));
+                merge(candidates,passage,referenceScore+(precise?500:0));
+            }
+            referenceScore=Math.max(500,referenceScore-1000);
+        }
+        for (String term : tokens) {
             addMatches(candidates, term, score(term));
         }
         return candidates.values().stream()
-                .sorted((left, right) -> Integer.compare(right.score(), left.score()))
+                .sorted(java.util.Comparator.comparingInt(ScoredPassage::score).reversed()
+                        .thenComparing(value -> value.passage().getLabel()))
                 .limit(MAX_RESULTS)
                 .map(ScoredPassage::passage)
                 .toList();
@@ -62,6 +82,11 @@ public class RuleRetrievalService {
             return;
         }
         for (RulePassage passage : passages.search(term.strip())) {
+            merge(candidates,passage,score);
+        }
+    }
+
+    private static void merge(Map<String,ScoredPassage> candidates,RulePassage passage,int score) {
             String key = passage.getId() == null
                     ? passage.getRule().getRuleNumber() + ":" + passage.getLabel()
                     : passage.getId().toString();
@@ -69,7 +94,6 @@ public class RuleRetrievalService {
                     key,
                     new ScoredPassage(passage, score),
                     (oldValue, newValue) -> new ScoredPassage(passage, oldValue.score() + score));
-        }
     }
 
     private static List<String> terms(String text) {
