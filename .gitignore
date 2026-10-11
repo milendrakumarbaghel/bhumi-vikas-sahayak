@@ -1,0 +1,16 @@
+# Secrets
+.env
+*.env.local
+
+# Stray local tool folder (contains editor/assistant history, never commit)
+/$HOME/
+
+# Build output
+target/
+node_modules/
+dist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
