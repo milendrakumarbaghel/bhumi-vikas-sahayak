@@ -16,6 +16,7 @@ class FixedProvider:
         system_prompt: str,
         user_message: str,
         json_schema: dict[str, Any],
+        effort: str = "low",
     ) -> str:
         return json.dumps({
             "language": "en",

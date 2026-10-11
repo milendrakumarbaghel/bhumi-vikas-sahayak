@@ -20,7 +20,7 @@ class Settings:
             port=_integer("AI_SERVICE_PORT", 8081),
             internal_token=os.getenv("BVS_AI_SERVICE_TOKEN", "").strip(),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", "").strip(),
+            anthropic_model=os.getenv("ANTHROPIC_MODEL", "").strip() or "claude-opus-5-5",
             provider_timeout_seconds=_number("AI_PROVIDER_TIMEOUT_SECONDS", 90.0),
         )
 

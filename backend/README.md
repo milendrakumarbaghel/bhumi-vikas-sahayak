@@ -20,8 +20,13 @@ Current endpoints:
 - `GET /api/rules`
 - `GET /api/rules/{ruleNumber}`
 - `POST /api/search`
+- `POST /api/ask` - `{question, language?: "auto"|"en"|"hi"}` -> `{status, language, answer, citations[], missingInputs[], calc, rulesVersion, warnings[]}`
 
-The final cited-answer endpoint, PostgreSQL persistence and legal calculators are not implemented yet.
+Every AI answer is verified before it is shown (`citation/AnswerVerifier`): each quote must be an exact
+substring of its rule's text, every rule number must exist and every number must appear in the cited
+rules or the question. A failed check is retried once, then returned as `not_found`.
+
+Legal calculators and PostgreSQL persistence are not implemented yet.
 
 ## Package structure
 
@@ -30,6 +35,7 @@ org.springboot.backend
 ├── api/             public controllers and transport DTOs
 ├── application/     use-case services
 ├── calc/            deterministic units/calculation utilities
+├── citation/        verifies AI quotes, rule numbers and numbers against the rule text
 ├── config/          web/runtime configuration
 ├── integration/ai/  internal HTTP contract to the Python service
 ├── retrieval/       offline normalization and Lucene retrieval

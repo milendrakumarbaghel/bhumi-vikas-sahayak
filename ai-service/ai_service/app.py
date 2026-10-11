@@ -9,16 +9,19 @@ from typing import Any, Type
 from ai_service.config import Settings
 from ai_service.providers.anthropic import AnthropicProvider
 from ai_service.providers.base import ProviderError
+from ai_service.services.answer import AnswerService
 from ai_service.services.query_intent import QueryIntentService
 
 
 LOGGER = logging.getLogger(__name__)
 MAX_BODY_BYTES = 16_384
+MAX_ANSWER_BODY_BYTES = 262_144  # question plus up to 10 rule extracts
 
 
 def create_handler(
     service: QueryIntentService,
     internal_token: str,
+    answer_service: AnswerService | None = None,
 ) -> Type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "BhumiVikasAiService/0.1"
@@ -33,7 +36,8 @@ def create_handler(
             self._json(404, {"code": "NOT_FOUND", "message": "Endpoint not found"})
 
         def do_POST(self) -> None:  # noqa: N802 - standard library callback name
-            if self.path != "/internal/v1/query-intents":
+            answers = self.path == "/internal/v1/answers" and answer_service is not None
+            if self.path != "/internal/v1/query-intents" and not answers:
                 self._json(404, {"code": "NOT_FOUND", "message": "Endpoint not found"})
                 return
             if internal_token and not compare_digest(
@@ -42,6 +46,12 @@ def create_handler(
                 self._json(401, {"code": "UNAUTHORIZED", "message": "Invalid internal token"})
                 return
             try:
+                if answers:
+                    body = self._request_json(MAX_ANSWER_BODY_BYTES)
+                    if not isinstance(body, dict):
+                        raise ValueError("request body must be an object")
+                    self._json(200, answer_service.answer(body).to_contract())
+                    return
                 body = self._request_json()
                 question = body.get("question") if isinstance(body, dict) else None
                 if not isinstance(question, str):
@@ -58,12 +68,12 @@ def create_handler(
                 LOGGER.exception("Unexpected AI-service request failure")
                 self._json(500, {"code": "INTERNAL_ERROR", "message": "Internal service error"})
 
-        def _request_json(self) -> Any:
+        def _request_json(self, max_bytes: int = MAX_BODY_BYTES) -> Any:
             try:
                 length = int(self.headers.get("content-length", "0"))
             except ValueError as exc:
                 raise ValueError("invalid content length") from exc
-            if length <= 0 or length > MAX_BODY_BYTES:
+            if length <= 0 or length > max_bytes:
                 raise ValueError("request body size is invalid")
             try:
                 return json.loads(self.rfile.read(length).decode("utf-8"))
@@ -95,7 +105,7 @@ def build_server(settings: Settings) -> ThreadingHTTPServer:
     service = QueryIntentService(provider)
     return ThreadingHTTPServer(
         (settings.host, settings.port),
-        create_handler(service, settings.internal_token),
+        create_handler(service, settings.internal_token, AnswerService(provider)),
     )
 
 

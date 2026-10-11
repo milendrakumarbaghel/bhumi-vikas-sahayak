@@ -12,6 +12,10 @@ from ai_service.providers.base import ProviderError
 LOGGER = logging.getLogger(__name__)
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 
+# Models that accept server-side refusal fallbacks ("fallbacks": "default").
+FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
 
 class AnthropicProvider:
     """Minimal standard-library adapter for Anthropic structured messages."""
@@ -34,31 +38,33 @@ class AnthropicProvider:
         system_prompt: str,
         user_message: str,
         json_schema: dict[str, Any],
+        effort: str = "low",
     ) -> str:
         if not self.configured:
             raise ProviderError("Anthropic provider is not configured")
 
         payload = {
             "model": self._model,
-            "max_tokens": 4096,
+            # Thinking tokens count towards max_tokens, so leave room beyond the small JSON reply.
+            "max_tokens": 16000,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_message}],
             "output_config": {
-                "effort": "low",
+                "effort": effort,
                 "format": {"type": "json_schema", "schema": json_schema},
             },
         }
+        headers = {
+            "content-type": "application/json",
+            "x-api-key": self._api_key,
+            "anthropic-version": "2023-06-01",
+        }
+        if self._model in FALLBACK_MODELS:
+            # If the model declines, the API retries on Anthropic's recommended fallback model.
+            payload["fallbacks"] = "default"
+            headers["anthropic-beta"] = FALLBACK_BETA
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        api_request = request.Request(
-            MESSAGES_URL,
-            data=encoded,
-            method="POST",
-            headers={
-                "content-type": "application/json",
-                "x-api-key": self._api_key,
-                "anthropic-version": "2023-06-01",
-            },
-        )
+        api_request = request.Request(MESSAGES_URL, data=encoded, method="POST", headers=headers)
         response = self._send_with_one_retry(api_request)
         try:
             body = json.loads(response)

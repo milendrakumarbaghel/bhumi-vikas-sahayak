@@ -46,3 +46,31 @@ class QueryAnalysis:
 
 def _measure(value: Measure | None) -> dict[str, Any] | None:
     return value.to_dict() if value else None
+
+
+@dataclass(frozen=True)
+class CitationProposal:
+    chunk_id: str
+    quote: str
+
+
+@dataclass(frozen=True)
+class AnswerProposal:
+    """An unverified answer. The Java backend checks every quote before showing it."""
+
+    status: str
+    language: str
+    answer: str
+    citations: tuple[CitationProposal, ...]
+    missing_inputs: tuple[str, ...]
+    model: str
+
+    def to_contract(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "language": self.language,
+            "answer": self.answer,
+            "citations": [{"chunkId": c.chunk_id, "quote": c.quote} for c in self.citations],
+            "missingInputs": list(self.missing_inputs),
+            "model": self.model,
+        }

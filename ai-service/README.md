@@ -10,13 +10,16 @@ The service may:
 - Translate a question into search-oriented English.
 - Propose legal topic codes and explicitly stated measurements.
 - Provide provider/model metadata to the backend.
+- Word a short answer (English or plain Hindi) from rule extracts the backend supplies,
+  citing each statement as a chunk ID plus a verbatim quote. The backend verifies every
+  quote against the rule text before anything is shown.
 
 The service must not:
 
 - Decide which rule legally applies.
 - Choose an authoritative table row.
 - Calculate fees, setbacks, FAR or other legal values.
-- Create authoritative source excerpts or citations.
+- Create authoritative citation metadata (rule number, title, pages); the backend attaches these.
 
 The Java backend validates every response and falls back to deterministic parsing when this service is unavailable.
 
@@ -32,7 +35,8 @@ ai_service/
 │   ├── base.py             provider protocol and safe exception
 │   └── anthropic.py        Anthropic HTTP adapter
 └── services/
-    └── query_intent.py     prompt, schema and measurement validation
+    ├── query_intent.py     prompt, schema and measurement validation
+    └── answer.py           grounded-answer prompt and schema
 tests/                      standard-library unit/API tests
 ```
 
@@ -104,6 +108,7 @@ Tests use a fake provider and make no external API calls.
 
 - `GET /internal/v1/health`
 - `POST /internal/v1/query-intents`
+- `POST /internal/v1/answers` - `{question, language, chunks[], calculation?}` -> `{status, answer, citations[{chunkId, quote}], missingInputs[]}`
 
 Example health check:
 
@@ -127,7 +132,7 @@ Invoke-RestMethod http://localhost:8081/internal/v1/health
 | `AI_SERVICE_PORT` | `8081` | Internal HTTP port. |
 | `BVS_AI_SERVICE_TOKEN` | empty | Shared token; required outside local development. |
 | `ANTHROPIC_API_KEY` | empty | Provider credential. |
-| `ANTHROPIC_MODEL` | empty | Supported provider model identifier. |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5` | Supported provider model identifier. |
 | `AI_PROVIDER_TIMEOUT_SECONDS` | `90` | Provider request timeout. |
 
 Never commit secrets or expose this service directly to the browser/public internet. Production should require a non-empty token and private network access.
