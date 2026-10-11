@@ -6,6 +6,23 @@ The intended workflow is simple: a clerk asks a question in English or Hindi, th
 
 This software is an informational aid. It does not grant permission, make a legal decision or replace verification by the competent authority.
 
+## Team and submission
+
+- **Team name:** Hack2Build.
+- **Track:** Track 1 - Bhumi Vikas Sahayak.
+- **Primary user:** Building-permission clerk at Bhopal Municipal Corporation.
+- **One workflow:** Ask a building-rule question, inspect a cited answer/calculation or explicit not-found/review response, and let the clerk decide.
+
+| Member | Actual name | Contribution |
+|---|---|---|
+| 1 | Milendra Kumar Baghel | Backend |
+| 2 | Tanisha Borana | AI-Service |
+| 3 | Abhishek Rajput | Backend |
+| 4 | Krishna Malviya | Database Architecture |
+| 5 | Srijan Tiwari | Frontend |
+
+The Track 1 guide requires a team of four to five. These are placeholders, not a claim about team membership; fill in real names and contributions before submitting the public repository.
+
 ## Project status
 
 Implemented foundations:
@@ -83,6 +100,87 @@ Component guides:
 Maven does not need to be installed globally; the repository includes Maven Wrapper scripts.
 
 Before starting the backend, create the local PostgreSQL database described in [the backend guide](backend/README.md), or set `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` for an existing database.
+
+## Run the project in 5 steps
+
+With the prerequisites installed, open the repository root. Use three terminals for the three services. The following runs Python calculators and safe source-excerpt answers without a paid API key; AI-generated bilingual wording additionally requires `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in the Python terminal.
+
+1. **Create a local database.** In `psql`, connected as your local PostgreSQL administrator, run:
+
+   ```sql
+   create user bhumi_vikas with password 'bhumi_vikas';
+   create database bhumi_vikas owner bhumi_vikas;
+   ```
+
+   Skip creation if you already have a database; use its connection values in step 3. This password is only a local development example.
+
+2. **Start Python in terminal 1.** Choose your platform and replace the internal-token placeholder with a random secret, also used in step 3.
+
+   macOS/Linux:
+
+   ```bash
+   cd ai-service
+   export BVS_AI_SERVICE_TOKEN="replace-with-a-random-internal-secret"
+   python3 -m ai_service
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   cd ai-service
+   $env:BVS_AI_SERVICE_TOKEN = "replace-with-a-random-internal-secret"
+   py -3 -m ai_service
+   ```
+
+   If the Windows Python Launcher is unavailable, use `python -m ai_service`.
+
+3. **Start Java in terminal 2, from the repository root.** Replace the administrator password with a unique password of at least 12 characters.
+
+   macOS/Linux:
+
+   ```bash
+   cd backend
+   export DB_URL="jdbc:postgresql://localhost:5432/bhumi_vikas"
+   export DB_USERNAME="bhumi_vikas"
+   export DB_PASSWORD="bhumi_vikas"
+   export BVS_BOOTSTRAP_ADMIN_USERNAME="local-admin"
+   export BVS_BOOTSTRAP_ADMIN_PASSWORD="replace-with-a-unique-long-password"
+   export BVS_AI_ENABLED="true"
+   export BVS_AI_SERVICE_URL="http://localhost:8081"
+   export BVS_AI_SERVICE_TOKEN="replace-with-a-random-internal-secret"
+   ./mvnw spring-boot:run
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   cd backend
+   $env:DB_URL = "jdbc:postgresql://localhost:5432/bhumi_vikas"
+   $env:DB_USERNAME = "bhumi_vikas"
+   $env:DB_PASSWORD = "bhumi_vikas"
+   $env:BVS_BOOTSTRAP_ADMIN_USERNAME = "local-admin"
+   $env:BVS_BOOTSTRAP_ADMIN_PASSWORD = "replace-with-a-unique-long-password"
+   $env:BVS_AI_ENABLED = "true"
+   $env:BVS_AI_SERVICE_URL = "http://localhost:8081"
+   $env:BVS_AI_SERVICE_TOKEN = "replace-with-a-random-internal-secret"
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   Flyway creates the schema and startup imports the corpus. Remove bootstrap variables after first provisioning; they do not reset an existing password.
+
+4. **Start React in terminal 3, from the repository root.** These commands work on macOS, Linux and Windows:
+
+   ```text
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+5. **Verify and try an answer.** Open `http://localhost:5173`, check `http://localhost:8080/api/v1/health/live`, then use the [macOS/Linux or Windows login-and-answer example](backend/README.md#login-and-use-the-api). Log in as `local-admin` with the password chosen in step 3 and send the returned Bearer token to `/api/v1/questions:answer`.
+
+   The frontend is currently a starter screen, not a working chat/login UI; the backend example is the available answer workflow. Without a provider key, Hindi responses may include English source excerpts. The service does not grant building permission. Windows Command Prompt alternatives are in the [backend](backend/README.md#run-on-windows-command-prompt) and [AI-service](ai-service/README.md#run-on-windows-command-prompt) guides.
+
+The sections below provide alternative startup modes and more configuration detail.
 
 ## Quick start without AI
 
@@ -285,3 +383,7 @@ The Track 1 data and source PDFs come from the Bhopal Impact Lab 2026 participan
 - [Original participant-pack repository](https://github.com/Laaaaksh/bhopal-impact-lab-2026)
 
 Organisers: Aniket Sahu and Arun Pratap Singh Chandel.
+
+## License
+
+Original project code and documentation are licensed under the [MIT License](LICENSE). Bundled government rule documents and third-party participant-pack materials retain their respective source rights and notices; the project license does not claim to relicense them.
